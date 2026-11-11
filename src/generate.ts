@@ -59,7 +59,7 @@ const WRITER = [
   "You write on behalf of one specific Substack writer. Substack Notes are short posts in a feed, read by people scrolling quickly, so each one has to stand on its own and earn the stop.",
   "The writer's published Notes are given as examples. They are the reference for voice: match their language, length, rhythm, line breaks, punctuation habits, level of formality and use (or absence) of emoji and hashtags. A reader who knows the writer should not be able to tell the text was drafted by someone else. When there are few or no examples, lean on the writer's instructions.",
   "Write in the same language as the examples unless the writer's instructions say otherwise. Do not copy sentences from the examples, and do not invent facts, numbers or personal anecdotes that are not in the material you are given.",
-  "Return plain text only: no titles, no numbering, no markdown.",
+  "Return plain text only: no titles, no numbering, no markdown. Never use em dashes.",
 ].join("\n\n");
 
 function voiceBlock(v: Voice) {
@@ -114,6 +114,24 @@ export function generateNotes(
   if (input.topic?.trim()) parts.push(`<idea>\n${input.topic.trim()}\n</idea>`);
   parts.push(
     `Write ${input.count} Notes${input.sourceText ? " drawn from the source article" : ""}${input.topic ? " developing the idea above" : ""}. Each Note makes one point. Vary the angle across the batch (an observation, a lesson, a question, a contrarian take, a short story from the source) so they do not read like the same post rewritten. Return one item per Note.`,
+  );
+  return askList(apiKey, WRITER, parts.join("\n\n"));
+}
+
+/**
+ * Writing prompts instead of finished text: an angle, a possible opening line and the questions the writer should
+ * answer in their own words. The writer does the writing.
+ */
+export function generateOutlines(
+  apiKey: string,
+  v: Voice,
+  input: { count: number; topic?: string; sourceTitle?: string; sourceText?: string },
+) {
+  const parts = voiceBlock(v);
+  if (input.sourceText?.trim()) parts.push(`<source_article title="${input.sourceTitle ?? ""}">\n${input.sourceText.trim()}\n</source_article>`);
+  if (input.topic?.trim()) parts.push(`<idea>\n${input.topic.trim()}\n</idea>`);
+  parts.push(
+    `The writer wants to write these Notes personally and needs starting points, not finished text. Propose ${input.count} different angles${input.sourceText ? " found in the source article" : ""}${input.topic ? " on the idea above" : ""}. For each one return a single item with exactly this layout, written in the writer's language:\nANGOLO: the angle in a few words\nAPERTURA POSSIBILE: one opening line they could adapt\nDA SCRIVERE TU: two or three short questions or prompts, each on its own line starting with "- ", that only the writer can answer from their own experience or opinion\nDo not write the body of the Note.`,
   );
   return askList(apiKey, WRITER, parts.join("\n\n"));
 }

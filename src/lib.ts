@@ -76,7 +76,7 @@ export interface Settings {
   cookie_ok: string; // "1" | "0" | "" (unknown)
   cookie_checked_at: string;
   paused: string; // "1" stops every automatic action
-  ai_drafts: string; // "1" allows Claude to write drafts
+  ai_drafts: string; // "0" switches Claude's writing help off
   next_own_sync: string;
   next_others_sync: string;
   last_others_sync: string;
@@ -174,4 +174,24 @@ export function nextSlots(count: number, slots: string[], tz: string, taken: Set
     }
   }
   return out;
+}
+
+/** Edit distance between two texts, used to tell a rewritten suggestion from an untouched one. */
+export function editDistance(a: string, b: string): number {
+  a = a.slice(0, 3000);
+  b = b.slice(0, 3000);
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/** A suggestion counts as the writer's own once a meaningful part of it has been rewritten. */
+export function madeOwn(original: string, current: string): boolean {
+  const norm = (t: string) => t.replace(/\s+/g, " ").trim();
+  const o = norm(original), c = norm(current);
+  return editDistance(o, c) >= Math.max(15, Math.round(o.length * 0.2));
 }

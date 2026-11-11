@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
-import { Env, encrypt, getSettings, getSid, localParts, zonedToUtc, makeSession, nextSlots, passwordMatches, sessionValid, setSetting } from "./lib";
+import { Env, encrypt, getSettings, getSid, localParts, zonedToUtc, makeSession, nextSlots, passwordMatches, sessionValid, setSetting, madeOwn } from "./lib";
 import { checkCookie, personUpdate, publishOne, sync, tick } from "./jobs";
-import { EMPTY_PROFILE, Voice, VoiceProfile, analyzeVoice, composeVoice, generateNotes, isRewriteMode, remixInspiration, rewriteNote, suggestReply } from "./generate";
+import { EMPTY_PROFILE, Voice, VoiceProfile, analyzeVoice, composeVoice, generateNotes, generateOutlines, isRewriteMode, remixInspiration, rewriteNote, suggestReply } from "./generate";
 import * as substack from "./substack";
 import page from "../public/index.html";
 
@@ -56,7 +56,7 @@ app.get("/api/settings", async (c) => {
     cookie_ok: s.cookie_ok === "" ? null : s.cookie_ok === "1",
     cookie_checked_at: s.cookie_checked_at ? Number(s.cookie_checked_at) : null,
     paused: s.paused === "1",
-    ai_drafts: s.ai_drafts === "1",
+    ai_drafts: s.ai_drafts !== "0",
     next_others_sync: s.next_others_sync ? Number(s.next_others_sync) : null,
     last_others_sync: s.last_others_sync ? Number(s.last_others_sync) : null,
   });
@@ -85,7 +85,7 @@ app.put("/api/settings", async (c) => {
     await setSetting(c.env, "slots", JSON.stringify(slots));
   }
   if (b.paused !== undefined) await setSetting(c.env, "paused", b.paused ? "1" : "");
-  if (b.ai_drafts !== undefined) await setSetting(c.env, "ai_drafts", b.ai_drafts ? "1" : "");
+  if (b.ai_drafts !== undefined) await setSetting(c.env, "ai_drafts", b.ai_drafts ? "1" : "0");
   if (b.cookie) {
     // Accept either the bare value or a pasted "substack.sid=..." pair.
     const sid = b.cookie.trim().replace(/^substack\.sid=/, "").split(";")[0];
@@ -159,22 +159,30 @@ app.post("/api/notes", async (c) => {
   return c.json({ ok: true, created: bodies.length });
 });
 
+const NEEDS_REWRITE = "È uno spunto di Claude: riscrivilo con parole tue prima di programmarlo";
+
 app.put("/api/notes/:id", async (c) => {
   const id = Number(c.req.param("id"));
   const b = await c.req.json<{ body?: string; scheduled_at?: number | null }>();
-  const note = await c.env.DB.prepare("SELECT status FROM notes WHERE id = ?").bind(id).first<{ status: string }>();
+  const note = await c.env.DB.prepare("SELECT status, ai_original, reviewed FROM notes WHERE id = ?")
+    .bind(id)
+    .first<{ status: string; ai_original: string | null; reviewed: number }>();
   if (!note) return c.json({ error: "Note non trovata" }, 404);
   if (note.status === "published" || note.status === "publishing") return c.json({ error: "Note già pubblicata" }, 409);
+  let reviewed = note.reviewed === 1;
   if (b.body !== undefined) {
     if (!b.body.trim()) return c.json({ error: "Testo vuoto" }, 400);
-    await c.env.DB.prepare("UPDATE notes SET body = ? WHERE id = ?").bind(b.body.trim(), id).run();
+    // A suggestion written by Claude becomes the writer's own only once it has really been rewritten.
+    if (note.ai_original !== null) reviewed = madeOwn(note.ai_original, b.body);
+    await c.env.DB.prepare("UPDATE notes SET body = ?, reviewed = ? WHERE id = ?").bind(b.body.trim(), reviewed ? 1 : 0, id).run();
   }
   if (b.scheduled_at !== undefined) {
+    if (b.scheduled_at && !reviewed) return c.json({ error: NEEDS_REWRITE, saved: b.body !== undefined }, 409);
     await c.env.DB.prepare("UPDATE notes SET scheduled_at = ?, status = ?, error = NULL WHERE id = ?")
       .bind(b.scheduled_at, b.scheduled_at ? "scheduled" : "draft", id)
       .run();
   }
-  return c.json({ ok: true });
+  return c.json({ ok: true, reviewed });
 });
 
 app.delete("/api/notes/:id", async (c) => {
@@ -186,7 +194,7 @@ app.delete("/api/notes/:id", async (c) => {
 app.post("/api/notes/schedule", async (c) => {
   const b = await c.req.json<{ ids?: number[] }>().catch(() => ({}) as { ids?: number[] });
   const s = await getSettings(c.env);
-  const drafts = (await c.env.DB.prepare("SELECT id FROM notes WHERE status = 'draft' ORDER BY created_at, id").all<{ id: number }>()).results
+  const drafts = (await c.env.DB.prepare("SELECT id FROM notes WHERE status = 'draft' AND reviewed = 1 ORDER BY created_at, id").all<{ id: number }>()).results
     .map((r) => r.id)
     .filter((id) => !b.ids || b.ids.includes(id));
   const taken = new Set(
@@ -276,7 +284,7 @@ app.post("/api/voice/analyze", async (c) => {
 
 /** Draft writing is off unless the owner switched it on in the settings. */
 async function claudeKey(env: Env) {
-  if ((await getSettings(env)).ai_drafts !== "1") throw new Error("La scrittura di bozze con Claude è disattivata (Impostazioni)");
+  if ((await getSettings(env)).ai_drafts === "0") throw new Error("La scrittura di bozze con Claude è disattivata (Impostazioni)");
   if (!env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY non configurata su Cloudflare");
   return env.ANTHROPIC_API_KEY;
 }
@@ -284,14 +292,14 @@ async function claudeKey(env: Env) {
 async function saveDrafts(env: Env, bodies: string[]) {
   const now = Date.now();
   if (bodies.length) {
-    await env.DB.batch(bodies.map((body) => env.DB.prepare("INSERT INTO notes (body, status, source, created_at) VALUES (?, 'draft', 'generated', ?)").bind(body, now)));
+    await env.DB.batch(bodies.map((body) => env.DB.prepare("INSERT INTO notes (body, status, source, created_at, ai_original, reviewed) VALUES (?, 'draft', 'generated', ?, ?, 0)").bind(body, now, body)));
   }
   return bodies.length;
 }
 
 app.post("/api/generate", async (c) => {
   const key = await claudeKey(c.env);
-  const b = await c.req.json<{ count?: number; topic?: string; source_text?: string; source_url?: string; dry?: boolean }>();
+  const b = await c.req.json<{ count?: number; topic?: string; source_text?: string; source_url?: string; dry?: boolean; mode?: string }>();
   const count = Math.min(Math.max(Number(b.count) || 5, 1), 20);
   let sourceText = b.source_text?.trim();
   let sourceTitle: string | undefined;
@@ -302,7 +310,7 @@ app.post("/api/generate", async (c) => {
   }
   if (!sourceText && !b.topic?.trim()) return c.json({ error: "Indica un'idea, un testo o il link di un post" }, 400);
   const v = await voice(c.env);
-  const bodies = await generateNotes(key, v, { count, topic: b.topic, sourceText, sourceTitle });
+  const bodies = await (b.mode === "full" ? generateNotes : generateOutlines)(key, v, { count, topic: b.topic, sourceText, sourceTitle });
   if (b.dry) return c.json({ ok: true, created: 0, bodies });
   return c.json({ ok: true, created: await saveDrafts(c.env, bodies), examples_used: v.examples.length });
 });
@@ -595,7 +603,7 @@ app.post("/api/explore", async (c) => {
   const urls = [
     `${W}/user/profile/self`, `${W}/activity/unread`, `${W}/activity`, `${W}/notifications`, `${W}/reader/notifications`,
     `${W}/activity/feed`, `${W}/inbox`, `${W}/subscriptions`, `${W}/feed/following`, `${W}/reader/feed?tab=following`,
-    ...(note ? [`${W}/reader/comment/${note.substack_id}/reactions`, `${W}/reader/comment/${note.substack_id}/restacks`, `${W}/comment/${note.substack_id}/reactors`, `${W}/note_stats/${note.substack_id}`] : []),
+    ...(note ? [`${W}/reader/comment/${note.substack_id}/reactions`, `${W}/reader/comment/${note.substack_id}/restacks`, `${W}/comment/${note.substack_id}/reactors`, `${W}/note_stats/${note.substack_id}`, `${W}/reader/comment/${note.substack_id}/stats`, `${W}/comment/${note.substack_id}/stats`, `${W}/notes/${note.substack_id}/stats`, `${W}/comment/${note.substack_id}/restackers`, `${W}/reader/comment/${note.substack_id}/restacked_by`] : []),
     ...(P
       ? [
           `${P}/archive?sort=new&limit=2`, `${P}/post_management/published?offset=0&limit=2&order_by=post_date&order_direction=desc`,

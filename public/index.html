@@ -382,10 +382,10 @@ views.studio = async (v) => {
       <div class="dname">${fmt(d.start, { weekday: "short" })}<b class="mono">${fmt(d.start, { day: "numeric" })}</b></div>
       <div class="slots">${cells.join("")}${extra.join("")}</div></div>`;
   };
-  const draftHtml = (n, i) => `<div class="draft" draggable="true" data-id="${n.id}" style="--i:${i}">
-      <span class="grip" title="Trascina su uno slot">${icon("grip")}</span>
+  const draftHtml = (n, i) => `<div class="draft" ${n.reviewed ? 'draggable="true"' : ""} data-id="${n.id}" style="--i:${i}">
+      <span class="grip" title="${n.reviewed ? "Trascina su uno slot" : "Da riscrivere prima di programmare"}" ${n.reviewed ? "" : 'style="cursor:default;color:var(--accent)"'}>${icon(n.reviewed ? "grip" : "spark")}</span>
       <div class="grow"><div class="body clamp">${esc(n.body)}</div>
-        <div class="row meta" style="margin-top:6px">${n.status === "failed" ? '<span class="tag bad">Errore</span>' : ""}${n.status === "publishing" ? '<span class="tag bad">Bloccata</span>' : ""}${n.source === "generated" ? `<span class="tag">${icon("spark")}generata</span>` : ""}<span class="mono">${n.body.length}</span></div>
+        <div class="row meta" style="margin-top:6px">${n.status === "failed" ? '<span class="tag bad">Errore</span>' : ""}${n.status === "publishing" ? '<span class="tag bad">Bloccata</span>' : ""}${!n.reviewed ? `<span class="tag ok">Spunto di Claude · da riscrivere</span>` : n.source === "generated" ? `<span class="tag">nata da uno spunto</span>` : ""}<span class="mono">${n.body.length}</span></div>
         ${n.error ? `<p class="err">${esc(n.error)}</p>` : ""}</div></div>`;
 
   v.innerHTML = `
@@ -446,6 +446,7 @@ function openEditor(n) {
   const d = $("#editor"), isNew = !n.id, locked = n.status === "published" || n.status === "publishing";
   d.innerHTML = `<form method="dialog" class="dlg">
     <div class="row"><h1 style="font-size:18px" class="grow">${isNew ? "Nuova Note" : "Modifica Note"}</h1><button class="quiet" value="close" title="Chiudi">${icon("x")}</button></div>
+    ${n.id && !n.reviewed ? `<p class="meta" style="margin:0;padding:10px 12px;background:var(--accent-soft);border-radius:10px;color:var(--accent)">Questo è uno spunto di Claude. Usalo come traccia e riscrivilo con parole tue: finché resta com'è non si può programmare né pubblicare.</p>` : ""}
     <textarea id="eBody" ${locked ? "readonly" : ""} placeholder="Scrivi la Note…">${esc(n.body)}</textarea>
     <div class="row"><span class="meta mono" id="eCount">${n.body.length}</span><span class="grow"></span>
       ${settings.ai_drafts ? `<span class="meta">Riscrivi:</span>
@@ -475,7 +476,12 @@ function openEditor(n) {
     const when = $("#eWhen", d).value ? new Date($("#eWhen", d).value).getTime() : null;
     if (when && when < Date.now()) throw new Error("La data è nel passato");
     if (isNew) await api("/notes", "POST", { body: text, scheduled_at: when || undefined });
-    else await api("/notes/" + n.id, "PUT", { body: text, scheduled_at: when });
+    else {
+      // Save the text first, so a refusal to schedule an unrewritten suggestion never loses the edit.
+      const r = await api("/notes/" + n.id, "PUT", { body: text });
+      if (when && !r.reviewed) { toast("Salvata, ma è ancora troppo simile allo spunto di Claude: riscrivila di più per programmarla"); return close(); }
+      if (when !== n.scheduled_at) await api("/notes/" + n.id, "PUT", { scheduled_at: when });
+    }
     toast(when ? "Programmata per " + fmt(when) : "Bozza salvata"); close();
   });
   if (!isNew) {
@@ -493,14 +499,16 @@ function openEditor(n) {
 views.generate = async (v) => {
   const st = await api("/stats?days=3650");
   v.innerHTML = `
-    <div class="head"><div><h1>Genera</h1><p class="lede">Dai a Claude un'idea, un articolo o il link di un post: scrive le bozze nella tua voce e le lascia nello Studio, pronte da rivedere.</p></div></div>
+    <div class="head"><div><h1>Genera</h1><p class="lede">Dai a Claude un'idea, un articolo o il link di un post. Lui propone, tu scrivi: gli spunti arrivano nello Studio e diventano Notes solo dopo che li hai riscritti.</p></div></div>
     <div class="two">
       <section>
         <div class="field"><label for="gTopic">Idea o tema</label><textarea id="gTopic" placeholder="Per esempio: perché la costanza batte il talento quando si scrive online"></textarea></div>
         <div class="field"><label for="gUrl">Link di un post Substack</label><input id="gUrl" placeholder="https://tuonome.substack.com/p/titolo-del-post"><span class="help">Il post deve essere pubblico.</span></div>
         <div class="field"><label for="gText">Testo di un articolo</label><textarea id="gText" placeholder="Incolla qui il testo da trasformare in Notes"></textarea></div>
-        <div class="row"><div class="field" style="margin:0"><label for="gCount">Quante Notes</label><input id="gCount" class="auto mono" type="number" min="1" max="20" value="5" style="width:90px"></div>
-          <span class="grow"></span><button class="btn" id="gGo">${icon("spark")}Genera bozze</button></div>
+        <div class="field"><label>Cosa vuoi da Claude</label><div class="tabs" id="gMode"><button type="button" data-m="outline" class="on">Tracce da scrivere io</button><button type="button" data-m="full">Bozze da riscrivere</button></div>
+          <span class="help" id="gModeHelp">Per ogni idea: un angolo, un'apertura possibile e le domande a cui rispondi tu. Il testo lo scrivi tu.</span></div>
+        <div class="row"><div class="field" style="margin:0"><label for="gCount">Quante</label><input id="gCount" class="auto mono" type="number" min="1" max="20" value="5" style="width:90px"></div>
+          <span class="grow"></span><button class="btn" id="gGo">${icon("spark")}Proponi spunti</button></div>
         <div id="gMsg" style="margin-top:16px"></div>
       </section>
       <section class="panel pad">
@@ -514,11 +522,14 @@ views.generate = async (v) => {
         </div>
       </section>
     </div>`;
+  let gMode = "outline";
+  $("#gMode").onclick = (e) => { const b = e.target.closest("[data-m]"); if (!b) return; gMode = b.dataset.m; $$("#gMode button").forEach((x) => x.classList.toggle("on", x === b));
+    $("#gModeHelp").textContent = gMode === "outline" ? "Per ogni idea: un angolo, un'apertura possibile e le domande a cui rispondi tu. Il testo lo scrivi tu." : "Testi completi nella tua voce, da usare come base. Non si possono programmare finché non li hai riscritti in buona parte."; };
   $("#gGo").onclick = (e) => act(e.currentTarget, async () => {
     $("#gMsg").innerHTML = `<p class="meta">Sto scrivendo. Può volerci fino a un minuto.</p>${skel(3, 70)}`;
     try {
-      const r = await api("/generate", "POST", { topic: $("#gTopic").value, source_url: $("#gUrl").value, source_text: $("#gText").value, count: +$("#gCount").value });
-      toast(`${r.created} bozze create`); go("studio");
+      const r = await api("/generate", "POST", { topic: $("#gTopic").value, source_url: $("#gUrl").value, source_text: $("#gText").value, count: +$("#gCount").value, mode: gMode });
+      toast(`${r.created} spunti nelle bozze, da riscrivere`); go("studio");
     } finally { if ($("#gMsg")) $("#gMsg").innerHTML = ""; }
   });
 };
@@ -600,7 +611,7 @@ views.voice = async (v) => {
   $("#vTry").onclick = (e) => act(e.currentTarget, async () => {
     if (!$("#vTopic").value.trim()) throw new Error("Scrivi un tema di prova");
     await save(); $("#vOut").innerHTML = skel(2, 70);
-    try { const r = await api("/generate", "POST", { topic: $("#vTopic").value, count: 2, dry: true }); $("#vOut").innerHTML = r.bodies.map((b, i) => `<div class="variant body" style="--i:${i};cursor:default">${esc(b)}</div>`).join(""); }
+    try { const r = await api("/generate", "POST", { topic: $("#vTopic").value, count: 2, dry: true, mode: "full" }); $("#vOut").innerHTML = r.bodies.map((b, i) => `<div class="variant body" style="--i:${i};cursor:default">${esc(b)}</div>`).join(""); }
     catch (err) { $("#vOut").innerHTML = ""; throw err; }
   });
 };
@@ -797,7 +808,7 @@ views.feed = async (v) => {
     if (ds.rm) act(b, async () => { await api("/follows/" + encodeURIComponent(ds.rm), "DELETE"); render(); });
     if (ds.save) act(b, async () => { await api("/inspirations", "POST", { substack_id: ds.save }); toast("Salvata tra le ispirazioni"); render(); });
     if (ds.unsave) act(b, async () => { await api("/inspirations/" + ds.unsave, "DELETE"); render(); });
-    if (ds.remix) act(b, async () => { toast("Sto scrivendo, può volerci un minuto"); const r = await api(`/inspirations/${ds.remix}/remix`, "POST"); toast(`${r.created} bozze create`); go("studio"); });
+    if (ds.remix) act(b, async () => { toast("Sto scrivendo, può volerci un minuto"); const r = await api(`/inspirations/${ds.remix}/remix`, "POST"); toast(`${r.created} spunti nelle bozze, da riscrivere`); go("studio"); });
   };
 };
 
@@ -824,7 +835,7 @@ views.settings = async (v) => {
         ${s.last_sync_error ? `<p class="err">Ultima sincronizzazione: ${esc(s.last_sync_error)}</p>` : ""}
         <div class="sec"><h2 class="grow">Protezione</h2></div>
         <label class="switch"><input type="checkbox" id="sPaused" ${s.paused ? "checked" : ""}><div><b>Pausa totale</b><span>Ferma pubblicazione programmata e ogni lettura automatica. Le Notes in coda restano dove sono.</span></div></label>
-        <label class="switch"><input type="checkbox" id="sAi" ${s.ai_drafts ? "checked" : ""}><div><b>Scrittura di bozze con Claude</b><span>Spenta, l'app non genera né riscrive testi e le sezioni Genera e Voce spariscono.</span></div></label>
+        <label class="switch"><input type="checkbox" id="sAi" ${s.ai_drafts ? "checked" : ""}><div><b>Aiuto di Claude nella scrittura</b><span>Claude propone tracce, riscritture e risposte; pubblichi solo ciò che hai riscritto tu. Spenta, le sezioni Genera e Voce spariscono.</span></div></label>
         <div class="item meta" style="border:0">Contenuti di altri (risposte, creator seguiti, profili): letti una volta al giorno, a un orario casuale tra le 7 e le 22, con pause tra una richiesta e l'altra.
           ${s.last_others_sync ? ` Ultima lettura ${fmt(s.last_others_sync)}.` : ""}${s.next_others_sync ? ` Prossima ${fmt(s.next_others_sync)}.` : ""}
           Le Notes programmate escono fino a 6 minuti dopo lo slot, mai al minuto esatto.</div>
@@ -837,7 +848,7 @@ views.settings = async (v) => {
     await api("/settings", "PUT", { handle: $("#sHandle").value, cookie: $("#sCookie").value || undefined, timezone: $("#sTz").value, slots: $("#sSlots").value.split(",") });
     toast("Impostazioni salvate"); render();
   });
-  for (const [id, key, msg] of [["#sPaused", "paused", ["Pausa attivata", "Pausa tolta"]], ["#sAi", "ai_drafts", ["Scrittura di bozze attivata", "Scrittura di bozze disattivata"]]]) {
+  for (const [id, key, msg] of [["#sPaused", "paused", ["Pausa attivata", "Pausa tolta"]], ["#sAi", "ai_drafts", ["Aiuto di Claude attivato", "Aiuto di Claude disattivato"]]]) {
     $(id).onchange = (e) => act(null, async () => { await api("/settings", "PUT", { [key]: e.target.checked }); settings = await api("/settings"); drawNav(); drawStatus(); toast(msg[e.target.checked ? 0 : 1]); });
   }
   $("#sExplore").onclick = (e) => act(e.currentTarget, async () => {

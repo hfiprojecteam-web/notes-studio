@@ -13,7 +13,9 @@ CREATE TABLE IF NOT EXISTS notes (
   substack_id TEXT,
   error TEXT,
   source TEXT,                          -- manual | generated
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  ai_original TEXT,                     -- text as Claude proposed it, if it was a suggestion
+  reviewed INTEGER NOT NULL DEFAULT 1   -- 0 until a suggestion has been rewritten by the writer
 );
 CREATE INDEX IF NOT EXISTS notes_due ON notes (status, scheduled_at);
 

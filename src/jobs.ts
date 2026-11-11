@@ -3,10 +3,10 @@ import * as substack from "./substack";
 
 /** Publishes one queued note. Marks it `publishing` first so two runs can never post it twice. */
 export async function publishOne(env: Env, id: number): Promise<{ ok: boolean; error?: string }> {
-  const claim = await env.DB.prepare("UPDATE notes SET status = 'publishing' WHERE id = ? AND status IN ('scheduled','draft','failed')")
+  const claim = await env.DB.prepare("UPDATE notes SET status = 'publishing' WHERE id = ? AND status IN ('scheduled','draft','failed') AND reviewed = 1")
     .bind(id)
     .run();
-  if (!claim.meta.changes) return { ok: false, error: "Note non trovata o già in pubblicazione" };
+  if (!claim.meta.changes) return { ok: false, error: "Note non trovata, già in pubblicazione, o spunto di Claude non ancora riscritto" };
 
   const note = await env.DB.prepare("SELECT body FROM notes WHERE id = ?").bind(id).first<{ body: string }>();
   const sid = await getSid(env, await getSettings(env));

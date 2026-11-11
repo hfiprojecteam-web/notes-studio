@@ -173,7 +173,7 @@ export async function probe(url: string, sid: string) {
     const text = await res.text();
     let body: any = null;
     try {
-      body = shape(JSON.parse(text), 2);
+      body = shape(JSON.parse(text), 4);
     } catch {
       body = `non-JSON (${text.length} bytes)`;
     }

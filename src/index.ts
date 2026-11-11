@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { Env, encrypt, getSettings, getSid, localParts, zonedToUtc, makeSession, nextSlots, passwordMatches, sessionValid, setSetting } from "./lib";
-import { checkCookie, publishDue, publishOne, sync } from "./jobs";
-import { Voice, generateNotes, isRewriteMode, remixInspiration, rewriteNote, suggestReply } from "./generate";
+import { checkCookie, personUpdate, publishDue, publishOne, sync } from "./jobs";
+import { EMPTY_PROFILE, Voice, VoiceProfile, analyzeVoice, composeVoice, generateNotes, isRewriteMode, remixInspiration, rewriteNote, suggestReply } from "./generate";
 import * as substack from "./substack";
 import page from "../public/index.html";
 
@@ -48,7 +48,7 @@ app.get("/api/settings", async (c) => {
     handle: s.handle,
     timezone: s.timezone,
     slots: JSON.parse(s.slots),
-    voice_prompt: s.voice_prompt,
+    has_voice: !!composeVoice(readProfile(s)),
     has_cookie: !!s.sid_enc,
     has_claude_key: !!c.env.ANTHROPIC_API_KEY,
     last_sync: s.last_sync ? Number(s.last_sync) : null,
@@ -59,7 +59,7 @@ app.get("/api/settings", async (c) => {
 });
 
 app.put("/api/settings", async (c) => {
-  const b = await c.req.json<{ handle?: string; timezone?: string; slots?: string[]; voice_prompt?: string; cookie?: string }>();
+  const b = await c.req.json<{ handle?: string; timezone?: string; slots?: string[]; cookie?: string }>();
   if (b.handle !== undefined) {
     const handle = b.handle.trim().replace(/^@/, "");
     if (handle) {
@@ -80,7 +80,6 @@ app.put("/api/settings", async (c) => {
     const slots = [...new Set(b.slots.map((s) => s.trim()).filter((s) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s)))].sort();
     await setSetting(c.env, "slots", JSON.stringify(slots));
   }
-  if (b.voice_prompt !== undefined) await setSetting(c.env, "voice_prompt", b.voice_prompt);
   if (b.cookie) {
     // Accept either the bare value or a pasted "substack.sid=..." pair.
     const sid = b.cookie.trim().replace(/^substack\.sid=/, "").split(";")[0];
@@ -216,11 +215,58 @@ async function voice(env: Env): Promise<Voice> {
   type Row = { substack_id: string; body: string };
   const top = await env.DB.prepare("SELECT substack_id, body FROM my_notes WHERE length(body) > 40 ORDER BY likes + restacks * 2 DESC LIMIT 12").all<Row>();
   const latest = await env.DB.prepare("SELECT substack_id, body FROM my_notes WHERE length(body) > 40 ORDER BY date DESC LIMIT 8").all<Row>();
+  const profile = readProfile(s);
   return {
-    voicePrompt: s.voice_prompt,
+    voicePrompt: composeVoice(profile),
+    samples: profile.samples,
     examples: [...new Map([...top.results, ...latest.results].map((r) => [r.substack_id, r.body])).values()],
   };
 }
+
+/** The stored profile; instructions written before the profile existed become its free-text portrait. */
+function readProfile(s: { voice_profile: string; voice_prompt: string }): VoiceProfile {
+  try {
+    if (s.voice_profile) return { ...EMPTY_PROFILE, ...JSON.parse(s.voice_profile) };
+  } catch {
+    /* fall through to the default */
+  }
+  return { ...EMPTY_PROFILE, portrait: s.voice_prompt ?? "" };
+}
+
+const LANGUAGES = ["auto", "Italian", "English", "Spanish", "French", "German", "Portuguese"];
+
+app.get("/api/voice", async (c) => {
+  const s = await getSettings(c.env);
+  const n = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM my_notes WHERE length(body) > 40").first<{ n: number }>();
+  return c.json({ profile: readProfile(s), languages: LANGUAGES, notes: n?.n ?? 0, has_claude_key: !!c.env.ANTHROPIC_API_KEY });
+});
+
+app.put("/api/voice", async (c) => {
+  const b = await c.req.json<Partial<VoiceProfile>>();
+  const str = (v: unknown, max: number) => String(v ?? "").slice(0, max);
+  const list = (v: unknown, max: number) => (Array.isArray(v) ? v.map((x) => str(x, 60)).filter(Boolean).slice(0, max) : []);
+  const samples = (Array.isArray(b.samples) ? b.samples : []).map((x) => String(x ?? "").trim()).filter(Boolean).slice(0, 5);
+  if (samples.join("").length > 40_000) return c.json({ error: "I testi campione superano i 40.000 caratteri complessivi: accorciali" }, 400);
+  const profile: VoiceProfile = {
+    language: LANGUAGES.includes(String(b.language)) ? String(b.language) : "auto",
+    about: str(b.about, 1500), audience: str(b.audience, 1500), topics: str(b.topics, 1500),
+    tones: list(b.tones, 8), length: str(b.length, 60), emoji: str(b.emoji, 60), hashtags: str(b.hashtags, 60),
+    person: str(b.person, 60), address: str(b.address, 60), structure: list(b.structure, 8),
+    use_words: str(b.use_words, 1500), avoid_words: str(b.avoid_words, 1500), cta: str(b.cta, 800), portrait: str(b.portrait, 4000),
+    samples,
+  };
+  await setSetting(c.env, "voice_profile", JSON.stringify(profile));
+  return c.json({ ok: true });
+});
+
+app.post("/api/voice/analyze", async (c) => {
+  const key = claudeKey(c.env);
+  const profile = readProfile(await getSettings(c.env));
+  const notes = await c.env.DB.prepare("SELECT body FROM my_notes WHERE length(body) > 40 ORDER BY likes + restacks * 2 DESC LIMIT 25").all<{ body: string }>();
+  const texts = [...profile.samples, ...notes.results.map((r) => r.body)];
+  if (texts.join("").length < 600) return c.json({ error: "Servono più testi: incolla almeno un tuo scritto tra i testi campione e salva" }, 400);
+  return c.json({ portrait: await analyzeVoice(key, texts, profile.language) });
+});
 
 function claudeKey(env: Env) {
   if (!env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY non configurata su Cloudflare");
@@ -237,7 +283,7 @@ async function saveDrafts(env: Env, bodies: string[]) {
 
 app.post("/api/generate", async (c) => {
   const key = claudeKey(c.env);
-  const b = await c.req.json<{ count?: number; topic?: string; source_text?: string; source_url?: string }>();
+  const b = await c.req.json<{ count?: number; topic?: string; source_text?: string; source_url?: string; dry?: boolean }>();
   const count = Math.min(Math.max(Number(b.count) || 5, 1), 20);
   let sourceText = b.source_text?.trim();
   let sourceTitle: string | undefined;
@@ -249,6 +295,7 @@ app.post("/api/generate", async (c) => {
   if (!sourceText && !b.topic?.trim()) return c.json({ error: "Indica un'idea, un testo o il link di un post" }, 400);
   const v = await voice(c.env);
   const bodies = await generateNotes(key, v, { count, topic: b.topic, sourceText, sourceTitle });
+  if (b.dry) return c.json({ ok: true, created: 0, bodies });
   return c.json({ ok: true, created: await saveDrafts(c.env, bodies), examples_used: v.examples.length });
 });
 
@@ -444,6 +491,87 @@ app.delete("/api/follows/:handle", async (c) => {
     c.env.DB.prepare("DELETE FROM feed_items WHERE handle = ?").bind(h),
   ]);
   return c.json({ ok: true });
+});
+
+// ---------- people ----------
+
+const TAGS = ["lettore", "creator", "imprenditore", "competitor", "coopetitor"];
+
+app.get("/api/people", async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT p.*, COUNT(a.reply_id) AS interactions, MAX(a.date) AS last_interaction,
+            SUM(CASE WHEN a.status = 'open' THEN 1 ELSE 0 END) AS waiting
+     FROM people p LEFT JOIN activity a ON a.author_id = p.user_id
+     GROUP BY p.user_id ORDER BY waiting DESC, interactions DESC, COALESCE(p.followers, 0) DESC LIMIT 300`,
+  ).all();
+  return c.json({ tags: TAGS, people: results.map((r: any) => ({ ...r, subscriptions: r.subscriptions ? JSON.parse(r.subscriptions) : null })) });
+});
+
+/** Looks up any Substack profile by handle and stores it. */
+app.post("/api/people", async (c) => {
+  const { handle } = await c.req.json<{ handle: string }>();
+  const clean = (handle ?? "").trim().replace(/^https?:\/\/substack\.com\/@/, "").replace(/^@/, "").split(/[/?]/)[0];
+  if (!clean) return c.json({ error: "Handle mancante" }, 400);
+  const sid = (await getSid(c.env, await getSettings(c.env))) ?? undefined;
+  const p = await substack.getFullProfile(clean, sid);
+  await personUpdate(c.env, p, Date.now()).run();
+  return c.json({ ok: true, name: p.name, user_id: p.id });
+});
+
+app.put("/api/people/:id", async (c) => {
+  const { tag } = await c.req.json<{ tag: string | null }>();
+  if (tag && !TAGS.includes(tag)) return c.json({ error: "Etichetta non valida" }, 400);
+  await c.env.DB.prepare("UPDATE people SET tag = ? WHERE user_id = ?").bind(tag || null, Number(c.req.param("id"))).run();
+  return c.json({ ok: true });
+});
+
+app.delete("/api/people/:id", async (c) => {
+  await c.env.DB.prepare("DELETE FROM people WHERE user_id = ?").bind(Number(c.req.param("id"))).run();
+  return c.json({ ok: true });
+});
+
+// ---------- trend ----------
+
+app.get("/api/trend", async (c) => {
+  return c.json((await c.env.DB.prepare("SELECT * FROM (SELECT * FROM snapshots ORDER BY day DESC LIMIT 120) ORDER BY day").all()).results);
+});
+
+// ---------- endpoint exploration ----------
+
+/**
+ * Tries the undocumented endpoints the next features would need and records only the shape of each answer
+ * (field names and types, never values), so it can be read back without exposing account data.
+ */
+app.post("/api/explore", async (c) => {
+  const s = await getSettings(c.env);
+  const sid = await getSid(c.env, s);
+  if (!sid || !s.handle) return c.json({ error: "Servono handle e cookie" }, 400);
+  const me = await substack.getFullProfile(s.handle, sid);
+  const note = await c.env.DB.prepare("SELECT substack_id FROM my_notes ORDER BY date DESC LIMIT 1").first<{ substack_id: string }>();
+  const post = (await substack.getUserPosts(me.id, 1, sid).catch(() => []))[0];
+  const W = "https://substack.com/api/v1";
+  const P = me.pubSubdomain ? `https://${me.pubSubdomain}.substack.com/api/v1` : null;
+  const urls = [
+    `${W}/user/profile/self`, `${W}/activity/unread`, `${W}/activity`, `${W}/notifications`, `${W}/reader/notifications`,
+    `${W}/activity/feed`, `${W}/inbox`, `${W}/subscriptions`, `${W}/feed/following`, `${W}/reader/feed?tab=following`,
+    ...(note ? [`${W}/reader/comment/${note.substack_id}/reactions`, `${W}/reader/comment/${note.substack_id}/restacks`, `${W}/comment/${note.substack_id}/reactors`, `${W}/note_stats/${note.substack_id}`] : []),
+    ...(P
+      ? [
+          `${P}/archive?sort=new&limit=2`, `${P}/post_management/published?offset=0&limit=2&order_by=post_date&order_direction=desc`,
+          `${P}/post_management/drafts?offset=0&limit=2`, `${P}/post_management/scheduled?offset=0&limit=2`, `${P}/drafts?limit=2`,
+          `${P}/publish-dashboard/summary-v2?range=30`, `${P}/publication/stats/growth/sources?days=30`, `${P}/subscriber-stats`,
+          `${P}/subscriber/stats`, `${P}/subscribers?limit=1`, `${P}/subscriptions/stats`, `${P}/publication_user/self`,
+          ...(post ? [`${P}/post/${post.id}/comments?all_comments=true&sort=best_first`, `${P}/post_management/detail/${post.id}`, `${P}/post/${post.id}/reactors`] : []),
+        ]
+      : []),
+  ];
+  const results = [];
+  for (const u of urls.slice(0, 40)) results.push(await substack.probe(u, sid));
+  const report = { at: Date.now(), publication: me.pubSubdomain, has_note: !!note, has_post: !!post, results };
+  await c.env.DB.prepare("INSERT INTO settings (key, value) VALUES ('explore_result', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+    .bind(JSON.stringify(report))
+    .run();
+  return c.json({ ok: true, tried: results.length, found: results.filter((r) => r.status === 200).length, results: results.map((r) => ({ url: r.url, status: r.status })) });
 });
 
 export default {

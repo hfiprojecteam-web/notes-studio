@@ -3,6 +3,56 @@ import Anthropic from "@anthropic-ai/sdk";
 export interface Voice {
   voicePrompt?: string; // the writer's own instructions
   examples: string[]; // the writer's published notes
+  samples?: string[]; // longer pieces of the writer's own prose
+}
+
+export interface VoiceProfile {
+  language: string; // "auto" or a language name
+  about: string;
+  audience: string;
+  topics: string;
+  tones: string[];
+  length: string;
+  emoji: string;
+  hashtags: string;
+  person: string;
+  address: string;
+  structure: string[];
+  use_words: string;
+  avoid_words: string;
+  cta: string;
+  portrait: string;
+  samples: string[];
+}
+
+export const EMPTY_PROFILE: VoiceProfile = {
+  language: "auto", about: "", audience: "", topics: "", tones: [], length: "", emoji: "", hashtags: "", person: "", address: "",
+  structure: [], use_words: "", avoid_words: "", cta: "", portrait: "", samples: [],
+};
+
+/** Turns the structured profile into the instruction text given to Claude. */
+export function composeVoice(p: VoiceProfile): string {
+  const lines: string[] = [];
+  const add = (label: string, value: string | string[]) => {
+    const v = Array.isArray(value) ? value.join(", ") : value?.trim();
+    if (v) lines.push(`${label}: ${v}`);
+  };
+  if (p.language && p.language !== "auto") lines.push(`Always write in ${p.language}, whatever the language of the source material.`);
+  add("Who the writer is", p.about);
+  add("Who they write for", p.audience);
+  add("Subjects they cover", p.topics);
+  add("Tone", p.tones);
+  add("Preferred length of a Note", p.length);
+  add("Emoji", p.emoji);
+  add("Hashtags", p.hashtags);
+  add("Grammatical person", p.person);
+  add("How they address the reader", p.address);
+  add("Structural habits", p.structure);
+  add("Words and expressions they like to use", p.use_words);
+  add("Words, expressions and habits to avoid", p.avoid_words);
+  add("How they usually close or invite a response", p.cta);
+  if (p.portrait?.trim()) lines.push(`Portrait of the voice:\n${p.portrait.trim()}`);
+  return lines.join("\n");
 }
 
 const WRITER = [
@@ -15,6 +65,11 @@ const WRITER = [
 function voiceBlock(v: Voice) {
   const parts: string[] = [];
   if (v.voicePrompt?.trim()) parts.push(`<writer_instructions>\n${v.voicePrompt.trim()}\n</writer_instructions>`);
+  if (v.samples?.length) {
+    parts.push(
+      `<writing_samples note="Longer prose by the same writer. Use it to hear the voice; do not treat its length or structure as the format of a Note.">\n${v.samples.map((e, i) => `<sample index="${i + 1}">\n${e}\n</sample>`).join("\n")}\n</writing_samples>`,
+    );
+  }
   if (v.examples.length) {
     parts.push(`<published_notes>\n${v.examples.map((e, i) => `<note index="${i + 1}">\n${e}\n</note>`).join("\n")}\n</published_notes>`);
   }
@@ -92,4 +147,13 @@ export function remixInspiration(apiKey: string, v: Voice, inspiration: { author
     `The writer saved the Note above, written by someone else, because its idea or structure works. Write ${count} original Notes in the writer's own voice that borrow what makes it work (the angle, the shape, the kind of hook) and apply it to the writer's own subject matter. Do not paraphrase it or reuse its sentences: someone who has read the original should see a different post. Return one item per Note.`,
   ].join("\n\n");
   return askList(apiKey, WRITER, user);
+}
+
+/** Reads the writer's own texts and describes the voice, as a draft the writer then edits. */
+export async function analyzeVoice(apiKey: string, texts: string[], language: string) {
+  const user = [
+    `<texts>\n${texts.map((t, i) => `<text index="${i + 1}">\n${t}\n</text>`).join("\n")}\n</texts>`,
+    `These texts were all written by the same person. Describe their writing voice so that another writer could imitate it faithfully: sentence length and rhythm, how they open and close, vocabulary and register, recurring devices, what they never do, the stance they take towards the reader. Be specific and quote short fragments as evidence. Describe only what the texts show; where the sample is too small to tell, say so rather than guessing. Write the description in ${language === "auto" ? "the language of the texts" : language}, as plain prose of 150 to 250 words. Return exactly one item.`,
+  ].join("\n\n");
+  return (await askList(apiKey, "You are an editor with a precise ear for prose style.", user))[0] ?? "";
 }

@@ -69,6 +69,7 @@ export interface Settings {
   timezone: string;
   slots: string; // JSON array of "HH:MM"
   voice_prompt: string;
+  voice_profile: string; // JSON, see VoiceProfile
   sid_enc: string;
   last_sync: string;
   last_sync_error: string;
@@ -82,6 +83,7 @@ const DEFAULTS: Settings = {
   timezone: "Europe/Rome",
   slots: '["09:00","13:00","18:30"]',
   voice_prompt: "",
+  voice_profile: "",
   sid_enc: "",
   last_sync: "",
   last_sync_error: "",

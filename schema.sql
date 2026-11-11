@@ -56,7 +56,8 @@ CREATE TABLE IF NOT EXISTS activity (
   author_handle TEXT,
   body TEXT NOT NULL,
   date INTEGER NOT NULL,
-  status TEXT NOT NULL DEFAULT 'open'   -- open | done
+  status TEXT NOT NULL DEFAULT 'open',  -- open | done
+  author_id INTEGER
 );
 
 -- Notes by other writers saved as a starting point for my own
@@ -66,4 +67,33 @@ CREATE TABLE IF NOT EXISTS inspirations (
   name TEXT,
   body TEXT NOT NULL,
   saved_at INTEGER NOT NULL
+);
+
+-- People who interact with me or that I looked up, with audience size and public subscriptions
+CREATE TABLE IF NOT EXISTS people (
+  user_id INTEGER PRIMARY KEY,
+  handle TEXT,
+  name TEXT,
+  photo_url TEXT,
+  bio TEXT,
+  followers INTEGER,
+  subscribers TEXT,
+  publication TEXT,
+  pub_subdomain TEXT,
+  subscriptions TEXT,            -- JSON: [{name, subdomain, state, founding}]
+  subs_truncated INTEGER DEFAULT 0,
+  tag TEXT,                      -- lettore | creator | imprenditore | competitor | coopetitor
+  refreshed_at INTEGER,
+  added_at INTEGER NOT NULL
+);
+
+-- One row per day with my own numbers
+CREATE TABLE IF NOT EXISTS snapshots (
+  day TEXT PRIMARY KEY,
+  followers INTEGER,
+  subscribers TEXT,
+  notes INTEGER,
+  likes INTEGER,
+  restacks INTEGER,
+  replies INTEGER
 );

@@ -1,4 +1,4 @@
-import { Env, getSettings, getSid, setSetting } from "./lib";
+import { Env, getSettings, getSid, localParts, setSetting } from "./lib";
 import * as substack from "./substack";
 
 /** Publishes one queued note. Marks it `publishing` first so two runs can never post it twice. */
@@ -61,14 +61,27 @@ export async function sync(env: Env, opts: { deep?: boolean } = {}) {
     const replies = await substack.getReplies(n.id, sid);
     for (const r of replies) {
       if (r.userId === me) continue;
+      stmts.push(
+        env.DB.prepare(
+          `INSERT INTO people (user_id, handle, name, photo_url, publication, pub_subdomain, added_at) VALUES (?,?,?,?,?,?,?)
+           ON CONFLICT(user_id) DO UPDATE SET name = COALESCE(excluded.name, name), handle = COALESCE(excluded.handle, handle),
+             photo_url = COALESCE(excluded.photo_url, photo_url), publication = COALESCE(publication, excluded.publication),
+             pub_subdomain = COALESCE(pub_subdomain, excluded.pub_subdomain)`,
+        ).bind(r.userId, r.handle, r.name, r.photoUrl, r.pubName, r.pubSubdomain, now),
+      );
       if (r.answeredBy.includes(me)) {
-        stmts.push(env.DB.prepare("UPDATE activity SET status = 'done' WHERE reply_id = ?").bind(r.id));
+        stmts.push(
+          env.DB.prepare(
+            `INSERT INTO activity (reply_id, note_id, note_body, author_name, author_handle, body, date, author_id, status) VALUES (?,?,?,?,?,?,?,?, 'done')
+             ON CONFLICT(reply_id) DO UPDATE SET status = 'done', author_id = excluded.author_id`,
+          ).bind(r.id, n.id, n.body.slice(0, 280), r.name, r.handle, r.body, r.date, r.userId),
+        );
       } else {
         stmts.push(
           env.DB.prepare(
-            `INSERT INTO activity (reply_id, note_id, note_body, author_name, author_handle, body, date) VALUES (?,?,?,?,?,?,?)
-             ON CONFLICT(reply_id) DO NOTHING`,
-          ).bind(r.id, n.id, n.body.slice(0, 280), r.name, r.handle, r.body, r.date),
+            `INSERT INTO activity (reply_id, note_id, note_body, author_name, author_handle, body, date, author_id) VALUES (?,?,?,?,?,?,?,?)
+             ON CONFLICT(reply_id) DO UPDATE SET author_id = excluded.author_id`,
+          ).bind(r.id, n.id, n.body.slice(0, 280), r.name, r.handle, r.body, r.date, r.userId),
         );
       }
     }
@@ -93,6 +106,50 @@ export async function sync(env: Env, opts: { deep?: boolean } = {}) {
   }
   stmts.push(env.DB.prepare("DELETE FROM feed_items WHERE date < ?").bind(now - 30 * 86400_000));
 
+  // 4. Daily snapshot of my own numbers, so trends can be drawn later
+  try {
+    const p = await substack.getFullProfile(s.handle, sid);
+    const lp = localParts(now, s.timezone);
+    const day = `${lp.y}-${String(lp.m).padStart(2, "0")}-${String(lp.d).padStart(2, "0")}`;
+    stmts.push(
+      env.DB.prepare(
+        `INSERT INTO snapshots (day, followers, subscribers, notes, likes, restacks, replies)
+         SELECT ?, ?, ?, COUNT(*), COALESCE(SUM(likes),0), COALESCE(SUM(restacks),0), COALESCE(SUM(replies),0) FROM my_notes WHERE true
+         ON CONFLICT(day) DO UPDATE SET followers=excluded.followers, subscribers=excluded.subscribers, notes=excluded.notes,
+           likes=excluded.likes, restacks=excluded.restacks, replies=excluded.replies`,
+      ).bind(day, p.followers, p.subscribers),
+    );
+  } catch (e) {
+    errors.push(`istantanea: ${e instanceof Error ? e.message : e}`);
+  }
+
+  // People found through replies have no handle yet: resolve a few per run from one of their replies.
+  const nameless = await env.DB.prepare(
+    "SELECT p.user_id, MAX(a.reply_id) AS reply_id FROM people p JOIN activity a ON a.author_id = p.user_id WHERE p.handle IS NULL GROUP BY p.user_id LIMIT 4",
+  ).all<{ user_id: number; reply_id: string }>();
+  for (const person of nameless.results) {
+    try {
+      const handle = await substack.getNoteAuthorHandle(person.reply_id, sid);
+      if (handle) stmts.push(env.DB.prepare("UPDATE people SET handle = ? WHERE user_id = ?").bind(handle, person.user_id));
+    } catch {
+      /* try again on the next run */
+    }
+  }
+
+  // 5. Refresh a few people profiles per run (audience size and public subscriptions)
+  const stale = await env.DB.prepare(
+    "SELECT user_id, handle FROM people WHERE handle IS NOT NULL AND (refreshed_at IS NULL OR refreshed_at < ?) ORDER BY refreshed_at IS NOT NULL, refreshed_at LIMIT 5",
+  )
+    .bind(now - 7 * 86400_000)
+    .all<{ user_id: number; handle: string }>();
+  for (const person of stale.results) {
+    try {
+      stmts.push(personUpdate(env, await substack.getFullProfile(person.handle, sid), now));
+    } catch {
+      stmts.push(env.DB.prepare("UPDATE people SET refreshed_at = ? WHERE user_id = ?").bind(now, person.user_id));
+    }
+  }
+
   for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
   await setSetting(env, "last_sync", String(now));
   await setSetting(env, "last_sync_error", errors.join("; "));
@@ -116,4 +173,15 @@ export async function checkCookie(env: Env): Promise<boolean | null> {
   if (ok !== null || !sid) await setSetting(env, "cookie_ok", ok === null ? "" : ok ? "1" : "0");
   await setSetting(env, "cookie_checked_at", String(Date.now()));
   return ok;
+}
+
+/** Upserts a person from a full public profile. */
+export function personUpdate(env: Env, p: substack.FullProfile, now: number) {
+  return env.DB.prepare(
+    `INSERT INTO people (user_id, handle, name, photo_url, bio, followers, subscribers, publication, pub_subdomain, subscriptions, subs_truncated, refreshed_at, added_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(user_id) DO UPDATE SET handle=excluded.handle, name=excluded.name, photo_url=excluded.photo_url, bio=excluded.bio,
+       followers=excluded.followers, subscribers=excluded.subscribers, publication=excluded.publication, pub_subdomain=excluded.pub_subdomain,
+       subscriptions=excluded.subscriptions, subs_truncated=excluded.subs_truncated, refreshed_at=excluded.refreshed_at`,
+  ).bind(p.id, p.handle, p.name, p.photoUrl, p.bio, p.followers, p.subscribers, p.pubName, p.pubSubdomain, JSON.stringify(p.subscriptions), p.subscriptionsTruncated ? 1 : 0, now, now);
 }

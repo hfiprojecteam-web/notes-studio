@@ -153,9 +153,33 @@
   @keyframes grow { from { transform: scaleY(0); } }
   .axis { display: flex; gap: 4px; font-size: 10.5px; color: var(--faint); margin-top: 5px; } .axis span { flex: 1; text-align: center; }
 
+  /* voice */
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip { border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 99px; padding: 6px 12px; font: 500 13.5px/1.2 inherit; cursor: pointer; transition: all .2s var(--ease); }
+  .chip:hover { border-color: var(--faint); color: var(--ink); }
+  .chip.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+  .chip:active { transform: scale(.96); }
+  .group { padding: 22px 0; border-top: 1px solid var(--line); }
+  .group > h2 { color: var(--ink); font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .group > p { margin: 0 0 16px; color: var(--muted); font-size: 13.5px; max-width: 60ch; }
+  .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+  .sticky { position: sticky; top: 24px; }
+  @media (max-width: 1020px) { .sticky { position: static; } }
+  @media (max-width: 620px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+
+  /* people */
+  .person { display: grid; grid-template-columns: 44px minmax(0, 1.3fr) minmax(0, 2fr) auto; gap: 16px; align-items: start; }
+  .avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: var(--sunken); display: grid; place-items: center; font-weight: 600; color: var(--muted); }
+  .subs { display: flex; flex-wrap: wrap; gap: 5px; }
+  .spark { width: 100%; height: 56px; display: block; }
+  .spark path { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+  .trend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 34px; margin-bottom: 34px; }
+  pre.report { font: 12px/1.5 "Geist Mono", monospace; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+  @media (max-width: 820px) { .person { grid-template-columns: 44px minmax(0, 1fr); } .person > :nth-child(n+3) { grid-column: 2; } .trend { grid-template-columns: minmax(0, 1fr); gap: 20px; } }
+
   /* misc */
-  .tabs { display: inline-flex; padding: 3px; background: var(--sunken); border-radius: 11px; gap: 2px; }
-  .tabs button { border: 0; background: none; padding: 7px 14px; border-radius: 8px; font: 500 14px/1 inherit; color: var(--muted); cursor: pointer; transition: all .25s var(--ease); }
+  .tabs { max-width: 100%; overflow-x: auto; display: inline-flex; padding: 3px; background: var(--sunken); border-radius: 11px; gap: 2px; }
+  .tabs button { white-space: nowrap; border: 0; background: none; padding: 7px 14px; border-radius: 8px; font: 500 14px/1 inherit; color: var(--muted); cursor: pointer; transition: all .25s var(--ease); }
   .tabs button.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
   .two { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 34px; align-items: start; }
   .focus { background: var(--sunken); box-shadow: inset 3px 0 0 var(--accent); padding-left: 14px; border-radius: 0 10px 10px 0; }
@@ -174,8 +198,8 @@
     #app { grid-template-columns: minmax(0, 1fr); }
     aside { position: fixed; inset: auto 0 0 0; height: auto; flex-direction: row; padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid var(--line); z-index: 10; }
     .brand, .side-foot { display: none; }
-    nav { flex-direction: row; width: 100%; justify-content: space-around; }
-    nav button { flex-direction: column; gap: 4px; font-size: 10.5px; padding: 7px 4px; width: auto; flex: 1; }
+    nav { flex-direction: row; width: 100%; justify-content: space-between; overflow-x: auto; }
+    nav button { flex-direction: column; gap: 4px; font-size: 10px; padding: 7px 5px; width: auto; flex: 1 0 auto; min-width: 52px; }
     nav .badge { position: absolute; margin: -4px 0 0 22px; }
     main { padding: 22px 16px 110px; }
     #toast { bottom: calc(84px + env(safe-area-inset-bottom)); }
@@ -276,7 +300,7 @@ async function act(btn, fn) {
 }
 
 // ---------- shell ----------
-const TABS = { studio: ["Studio", "studio"], generate: ["Genera", "spark"], stats: ["Statistiche", "chart"], activity: ["Attività", "chat"], feed: ["Feed", "users"], settings: ["Impostazioni", "gear"] };
+const TABS = { studio: ["Studio", "studio"], generate: ["Genera", "spark"], voice: ["Voce", "pen"], stats: ["Statistiche", "chart"], activity: ["Attività", "chat"], people: ["Persone", "users"], feed: ["Feed", "bookmark"], settings: ["Impostazioni", "gear"] };
 let tab = location.hash.slice(1) in TABS ? location.hash.slice(1) : "studio";
 let settings = null;
 
@@ -311,7 +335,7 @@ $("#logout").onclick = async () => { await api("/logout", "POST"); showLogin(); 
 
 const views = {};
 async function render() {
-  const v = $("#view"); v.onclick = v.onkeydown = null; document.onkeydown = null;
+  const v = $("#view"); v.onclick = v.onkeydown = v.onchange = v.oninput = null; document.onkeydown = null;
   v.innerHTML = `<div class="skel" style="height:34px;width:220px;margin-bottom:26px"></div>${skel(4)}`;
   try { await views[tab](v); } catch (e) { if (e.message !== "Sessione scaduta") v.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
 }
@@ -465,8 +489,8 @@ views.generate = async (v) => {
         <h2 style="margin-bottom:12px">Su cosa si basa la tua voce</h2>
         <div class="list">
           <div class="item"><b class="mono" style="font-size:22px;font-weight:500">${st.total}</b><div class="meta">Notes pubblicate usate come esempi${st.total < 10 ? ". Sono poche: per ora contano di più le istruzioni qui sotto." : "."}</div></div>
-          <div class="item"><span class="tag ${settings.voice_prompt ? "ok" : ""}">${settings.voice_prompt ? icon("check") + "Istruzioni di voce presenti" : "Istruzioni di voce mancanti"}</span>
-            <div class="meta" style="margin-top:6px">Lingua, tono, argomenti e cosa evitare. Si modificano nelle Impostazioni.</div></div>
+          <div class="item"><span class="tag ${settings.has_voice ? "ok" : ""}">${settings.has_voice ? icon("check") + "Profilo di voce compilato" : "Profilo di voce da compilare"}</span>
+            <div class="meta" style="margin-top:6px">Lingua, tono, pubblico, cosa evitare e testi campione. Si compila nella scheda Voce.</div></div>
           <div class="item"><span class="tag ${settings.has_claude_key ? "ok" : "bad"}">${settings.has_claude_key ? icon("check") + "Chiave Claude configurata" : "Chiave Claude mancante"}</span>
             ${settings.has_claude_key ? "" : '<div class="meta" style="margin-top:6px">Aggiungi il segreto ANTHROPIC_API_KEY su Cloudflare.</div>'}</div>
         </div>
@@ -481,10 +505,102 @@ views.generate = async (v) => {
   });
 };
 
+// ---------- Voce ----------
+const VOICE = {
+  langs: { auto: "Automatica (come i tuoi testi)", Italian: "Italiano", English: "Inglese", Spanish: "Spagnolo", French: "Francese", German: "Tedesco", Portuguese: "Portoghese" },
+  tones: ["diretto", "caldo", "ironico", "provocatorio", "riflessivo", "pratico", "tecnico", "motivante", "asciutto", "narrativo", "autorevole", "confidenziale"],
+  structure: ["frasi brevi", "a capo frequenti", "apertura forte", "una sola idea per Note", "elenchi puntati", "domanda finale", "esempi concreti", "numeri e dati"],
+  length: ["", "brevi (1-3 righe)", "medie (un paragrafo)", "lunghe (più paragrafi)", "miste"],
+  emoji: ["", "mai", "raramente", "liberamente"], hashtags: ["", "mai", "a volte"],
+  person: ["", "prima persona singolare (io)", "prima persona plurale (noi)", "impersonale"],
+  address: ["", "dà del tu", "dà del lei", "si rivolge a un gruppo (voi)", "non si rivolge direttamente al lettore"],
+};
+views.voice = async (v) => {
+  const d = await api("/voice"); const p = d.profile;
+  const sel = (id, opts, val, labels) => `<select id="${id}">${opts.map((o) => `<option value="${esc(o)}" ${o === val ? "selected" : ""}>${esc(labels ? labels[o] : o || "Nessuna preferenza")}</option>`).join("")}</select>`;
+  const chips = (name, opts, on) => `<div class="chips" data-chips="${name}">${[...new Set([...opts, ...on])].map((o) => `<button type="button" class="chip ${on.includes(o) ? "on" : ""}">${esc(o)}</button>`).join("")}</div>`;
+  const area = (id, label, val, ph, help) => `<div class="field"><label for="${id}">${label}</label><textarea id="${id}" placeholder="${esc(ph)}" style="min-height:84px">${esc(val)}</textarea>${help ? `<span class="help">${help}</span>` : ""}</div>`;
+  const samples = [...p.samples, ""].slice(0, 5);
+  v.innerHTML = `
+    <div class="head"><div><h1>Voce</h1><p class="lede">Più cose sa Claude di come scrivi, meno si sente che le bozze non sono tue. Ogni campo è facoltativo: compila quelli che contano per te.</p></div>
+      <button class="btn" id="vSave">${icon("check")}Salva profilo</button></div>
+    <div class="two">
+      <section>
+        <div class="group" style="border-top:0;padding-top:0"><h2>Lingua</h2><p>La lingua in cui vengono scritte bozze, riscritture e risposte.</p>
+          <div class="field" style="max-width:340px;margin:0">${sel("vLang", d.languages, p.language, VOICE.langs)}</div></div>
+        <div class="group"><h2>Chi sei e per chi scrivi</h2><p>Il contesto che un bravo ghostwriter chiederebbe al primo incontro.</p>
+          ${area("vAbout", "Chi sei", p.about, "Autore di guide pratiche, pubblico in self-publishing da tre anni…")}
+          ${area("vAudience", "A chi parli", p.audience, "Chi vuole pubblicare il primo libro e non sa da dove partire…")}
+          ${area("vTopics", "Di cosa scrivi", p.topics, "Self-publishing, scrittura, piccoli business digitali…", "I tuoi temi ricorrenti, anche quelli che non tratti mai.")}</div>
+        <div class="group"><h2>Tono</h2><p>Scegli quelli che ti somigliano. Puoi aggiungerne di tuoi.</p>
+          ${chips("tones", VOICE.tones, p.tones)}
+          <div class="row" style="margin-top:10px"><input id="vToneNew" class="auto" placeholder="Aggiungi un tono" style="width:200px"><button type="button" class="ghost" id="vToneAdd">${icon("plus")}Aggiungi</button></div></div>
+        <div class="group"><h2>Forma</h2><p>Le abitudini che rendono riconoscibile un testo a colpo d'occhio.</p>
+          <div class="field"><label>Struttura</label>${chips("structure", VOICE.structure, p.structure)}</div>
+          <div class="cols">
+            <div class="field"><label for="vLength">Lunghezza delle Notes</label>${sel("vLength", VOICE.length, p.length)}</div>
+            <div class="field"><label for="vPerson">Persona</label>${sel("vPerson", VOICE.person, p.person)}</div>
+            <div class="field"><label for="vAddress">Come ti rivolgi al lettore</label>${sel("vAddress", VOICE.address, p.address)}</div>
+            <div class="field"><label for="vEmoji">Emoji</label>${sel("vEmoji", VOICE.emoji, p.emoji)}</div>
+            <div class="field"><label for="vHash">Hashtag</label>${sel("vHash", VOICE.hashtags, p.hashtags)}</div>
+          </div></div>
+        <div class="group"><h2>Parole</h2><p>Il lessico è la firma più difficile da imitare senza indicazioni.</p>
+          ${area("vUse", "Parole ed espressioni tue", p.use_words, "Modi di dire, intercalari, termini che usi spesso…")}
+          ${area("vAvoid", "Da evitare", p.avoid_words, "Parole, frasi fatte, toni o argomenti che non vuoi mai…", "Qui vanno anche i cliché che ti fanno sembrare scritto da una macchina.")}
+          ${area("vCta", "Come chiudi o inviti a rispondere", p.cta, "Una domanda aperta, un invito a iscriversi, niente…")}</div>
+        <div class="group"><h2>Testi campione</h2><p>Con poche Notes pubblicate, questa è la parte che conta di più: incolla fino a cinque tuoi scritti (un articolo, una pagina di un libro, una email). Claude li usa per sentire la voce, non per copiarne il formato.</p>
+          <div id="vSamples">${samples.map((t, i) => `<div class="field"><label for="vS${i}">Testo ${i + 1}</label><textarea id="vS${i}" class="sample" placeholder="Incolla qui un tuo testo" style="min-height:110px">${esc(t)}</textarea></div>`).join("")}</div>
+          <span class="meta mono" id="vSampleCount"></span></div>
+      </section>
+      <section class="sticky" style="display:grid;gap:18px">
+        <div class="panel pad"><div class="row" style="margin-bottom:8px"><h2 class="grow" style="color:var(--ink);font-size:15px;font-weight:600">Ritratto della voce</h2><button class="ghost" id="vAnalyze" ${d.has_claude_key ? "" : "disabled"}>${icon("wand")}Analizza i miei testi</button></div>
+          <p class="meta" style="margin:0 0 10px">Una descrizione a parole di come scrivi. Puoi scriverla tu o farla proporre a Claude dai testi campione e dalle tue ${d.notes} Notes, poi correggerla.</p>
+          <textarea id="vPortrait" style="min-height:200px" placeholder="Per esempio: frasi corte, spesso una riga sola. Apro con un'affermazione netta, mai con una domanda…">${esc(p.portrait)}</textarea></div>
+        <div class="panel pad"><h2 style="color:var(--ink);font-size:15px;font-weight:600;margin-bottom:8px">Prova la voce</h2>
+          <p class="meta" style="margin:0 0 10px">Salva il profilo, poi fatti scrivere due Notes di prova. Non vengono salvate.</p>
+          <div class="row"><input id="vTopic" class="grow" placeholder="Un tema qualsiasi"><button class="ghost" id="vTry" ${d.has_claude_key ? "" : "disabled"}>${icon("spark")}Prova</button></div>
+          <div id="vOut" style="display:grid;gap:8px;margin-top:12px"></div>
+          ${d.has_claude_key ? "" : '<p class="err">Serve il segreto ANTHROPIC_API_KEY su Cloudflare.</p>'}</div>
+      </section>
+    </div>`;
+  const picked = (name) => $$(`[data-chips="${name}"] .chip.on`, v).map((c) => c.textContent);
+  const countSamples = () => { const n = $$(".sample", v).reduce((a, t) => a + t.value.length, 0); $("#vSampleCount").textContent = `${n} / 40000 caratteri`; };
+  countSamples();
+  const collect = () => ({ language: $("#vLang").value, about: $("#vAbout").value, audience: $("#vAudience").value, topics: $("#vTopics").value, tones: picked("tones"), structure: picked("structure"),
+    length: $("#vLength").value, person: $("#vPerson").value, address: $("#vAddress").value, emoji: $("#vEmoji").value, hashtags: $("#vHash").value,
+    use_words: $("#vUse").value, avoid_words: $("#vAvoid").value, cta: $("#vCta").value, portrait: $("#vPortrait").value, samples: $$(".sample", v).map((t) => t.value.trim()).filter(Boolean) });
+  const save = async () => { await api("/voice", "PUT", collect()); settings = await api("/settings"); };
+  v.onclick = (e) => { const c = e.target.closest(".chip"); if (c) c.classList.toggle("on"); };
+  v.oninput = (e) => { if (e.target.classList.contains("sample")) countSamples(); };
+  $("#vToneAdd").onclick = () => { const t = $("#vToneNew").value.trim().toLowerCase(); if (!t) return; $('[data-chips="tones"]', v).insertAdjacentHTML("beforeend", `<button type="button" class="chip on">${esc(t)}</button>`); $("#vToneNew").value = ""; };
+  $("#vSave").onclick = (e) => act(e.currentTarget, async () => { await save(); toast("Profilo di voce salvato"); });
+  $("#vAnalyze").onclick = (e) => act(e.currentTarget, async () => {
+    if ($("#vPortrait").value.trim() && !confirm("Sostituire il ritratto attuale con quello proposto da Claude?")) return;
+    await save(); toast("Sto leggendo i tuoi testi, può volerci un minuto");
+    $("#vPortrait").value = (await api("/voice/analyze", "POST")).portrait; toast("Ritratto proposto: correggilo e salva");
+  });
+  $("#vTry").onclick = (e) => act(e.currentTarget, async () => {
+    if (!$("#vTopic").value.trim()) throw new Error("Scrivi un tema di prova");
+    await save(); $("#vOut").innerHTML = skel(2, 70);
+    try { const r = await api("/generate", "POST", { topic: $("#vTopic").value, count: 2, dry: true }); $("#vOut").innerHTML = r.bodies.map((b, i) => `<div class="variant body" style="--i:${i};cursor:default">${esc(b)}</div>`).join(""); }
+    catch (err) { $("#vOut").innerHTML = ""; throw err; }
+  });
+};
+
 // ---------- Statistiche ----------
 let statDays = 90;
+const spark = (vals) => {
+  const max = Math.max(...vals), min = Math.min(...vals), span = max - min || 1;
+  return `<svg class="spark" viewBox="0 0 100 40" preserveAspectRatio="none"><path d="${vals.map((x, i) => `${i ? "L" : "M"}${(i / (vals.length - 1)) * 100} ${37 - ((x - min) / span) * 34}`).join(" ")}"/></svg>`;
+};
 views.stats = async (v) => {
-  const d = await api("/stats?days=" + statDays);
+  const [d, trend] = await Promise.all([api("/stats?days=" + statDays), api("/trend")]);
+  const tcard = (label, key) => {
+    const vals = trend.map((t) => t[key] ?? 0), lastV = vals[vals.length - 1], diff = lastV - vals[0];
+    return `<div><h2>${label}</h2><div class="row" style="align-items:baseline;margin-top:6px"><b class="mono" style="font-size:26px;font-weight:500">${lastV}</b><span class="meta mono">${diff >= 0 ? "+" : ""}${diff} in ${trend.length} giorni</span></div>${spark(vals)}</div>`;
+  };
+  const trendHtml = trend.length >= 2 ? `<div class="trend">${tcard("Follower", "followers")}${tcard("Like totali", "likes")}${tcard("Risposte totali", "replies")}</div>`
+    : `<div style="margin-bottom:30px">${empty("L'andamento si sta formando", `Da oggi l'app salva un'istantanea al giorno dei tuoi numeri${trend[0] ? ` (follower oggi: ${trend[0].followers ?? "n.d."}, iscritti: ${trend[0].subscribers ?? "n.d."})` : ""}. Il grafico compare dal secondo giorno.`)}</div>`;
   const bars = (rows, keys, label) => {
     const map = new Map(rows.map((r) => [String(r.key), r])); const max = Math.max(1, ...rows.map((r) => r.avg));
     return `<div class="bars">${keys.map((k, i) => { const r = map.get(String(k)); return `<div class="${r ? "" : "z"}" style="--i:${i};height:${r ? Math.max(4, (r.avg / max) * 100) : 2}%" title="${label(k)}: media ${r ? r.avg : 0} su ${r ? r.count : 0} Notes"></div>`; }).join("")}</div><div class="axis mono">${keys.map((k) => `<span>${label(k)}</span>`).join("")}</div>`;
@@ -495,6 +611,7 @@ views.stats = async (v) => {
     <div class="head"><div><h1>Statistiche</h1><p class="lede">Interazioni pubbliche delle tue Notes. ${d.last_sync ? "Aggiornate " + fmt(d.last_sync) + "." : "Mai sincronizzate."}</p></div>
       <select id="days" class="auto">${[30, 90, 365, 3650].map((x) => `<option value="${x}" ${x === statDays ? "selected" : ""}>${x === 3650 ? "Da sempre" : "Ultimi " + x + " giorni"}</option>`).join("")}</select>
       <button class="ghost" id="syncNow">${icon("repeat")}Sincronizza</button><button class="quiet" id="syncDeep" title="Scarica anche le Notes più vecchie">Importa storico</button></div>
+    ${trendHtml}
     ${d.total ? `
     <div class="metrics">
       <div class="metric"><b>${avg}</b><span class="meta">interazioni medie per Note</span></div>
@@ -555,6 +672,40 @@ views.activity = async (v) => {
   focus();
 };
 
+// ---------- Persone ----------
+let peopleFilter = "";
+views.people = async (v) => {
+  const d = await api("/people");
+  const list = d.people.filter((p) => !peopleFilter || p.tag === peopleFilter);
+  // Substack marks free sign-ups as "free_signup"; "subscribed" is a paying subscription.
+  const stateLabel = (x) => x.founding ? "fondatore" : x.state === "subscribed" ? "a pagamento" : x.state === "free_signup" ? "" : x.state.replace(/_/g, " ");
+  const row = (p, i) => `<div class="item person" data-id="${p.user_id}" style="--i:${Math.min(i, 14)}">
+      ${p.photo_url ? `<img class="avatar" src="${esc(p.photo_url)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="avatar">${esc((p.name || "?")[0])}</span>`}
+      <div><b style="font-weight:600">${esc(p.name || p.handle || "Senza nome")}</b>${p.handle ? ` <a class="meta" href="https://substack.com/@${esc(p.handle)}" target="_blank" rel="noopener">@${esc(p.handle)}</a>` : ""}
+        <div class="meta">${p.publication ? esc(p.publication) : "Nessuna pubblicazione"}</div>
+        <div class="row meta mono" style="margin-top:6px;gap:12px">${p.followers != null ? `<span>${p.followers} follower</span>` : ""}${p.subscribers ? `<span>${esc(p.subscribers)} iscritti</span>` : ""}</div>
+        <div class="row" style="margin-top:6px">${p.interactions ? `<span class="tag">${p.interactions} ${p.interactions === 1 ? "risposta" : "risposte"}</span>` : ""}${p.waiting ? `<span class="tag ok">${p.waiting} in attesa</span>` : ""}${p.last_interaction ? `<span class="meta">ultima ${fmt(p.last_interaction, { day: "numeric", month: "short" })}</span>` : ""}</div></div>
+      <div><h2 style="margin-bottom:6px">Iscritto a${p.subscriptions ? ` <span class="mono">${p.subscriptions.length}${p.subs_truncated ? "+" : ""}</span>` : ""}</h2>
+        ${p.subscriptions == null ? `<span class="meta">${p.handle ? "Non ancora letto: si aggiorna alla prossima sincronizzazione." : "Profilo non ancora identificato: ci riprova alla prossima sincronizzazione."}</span>`
+          : p.subscriptions.length ? `<div class="subs">${p.subscriptions.slice(0, 14).map((x) => `<span class="tag ${stateLabel(x) ? "ok" : ""}" title="${esc(x.state)}">${esc(x.name)}${stateLabel(x) ? " · " + esc(stateLabel(x)) : ""}</span>`).join("")}${p.subscriptions.length > 14 ? `<span class="meta">e altre ${p.subscriptions.length - 14}</span>` : ""}</div>`
+          : '<span class="meta">Nessun abbonamento pubblico.</span>'}</div>
+      <div class="row"><select class="auto" data-tag aria-label="Etichetta"><option value="">Senza etichetta</option>${d.tags.map((t) => `<option ${p.tag === t ? "selected" : ""}>${t}</option>`).join("")}</select>
+        <button class="quiet danger" data-del title="Rimuovi">${icon("x")}</button></div></div>`;
+  v.innerHTML = `
+    <div class="head"><div><h1>Persone</h1><p class="lede">Chi risponde alle tue Notes e chi vuoi tenere d'occhio: quanto pubblico ha, cosa pubblica e a quali newsletter è iscritto pubblicamente. In cima chi aspetta una tua risposta.</p></div>
+      <div class="row"><input id="pHandle" class="grow" placeholder="@handle o link al profilo" style="min-width:170px"><button class="btn" id="pAdd">${icon("plus")}Cerca e aggiungi</button></div></div>
+    <div class="tabs" style="margin-bottom:18px"><button data-pf="" class="${peopleFilter ? "" : "on"}">Tutti <span class="mono">${d.people.length}</span></button>${d.tags.map((t) => `<button data-pf="${t}" class="${peopleFilter === t ? "on" : ""}">${t}</button>`).join("")}</div>
+    <div class="list">${list.map(row).join("")}</div>
+    ${list.length ? "" : empty(peopleFilter ? "Nessuno con questa etichetta" : "Ancora nessuno", "Qui compare chi risponde alle tue Notes. Puoi anche cercare qualsiasi profilo Substack con il campo in alto: vedrai il suo pubblico e i suoi abbonamenti pubblici.")}
+    <p class="meta" style="margin-top:16px;max-width:70ch">Substack mostra solo gli abbonamenti che ciascuno ha scelto di tenere pubblici, e il numero di iscritti solo arrotondato. In verde gli abbonamenti a pagamento.</p>`;
+  $("#pAdd").onclick = (e) => act(e.currentTarget, async () => { const r = await api("/people", "POST", { handle: $("#pHandle").value }); toast("Aggiunto " + (r.name || "")); render(); });
+  v.onclick = (e) => {
+    const f = e.target.closest("[data-pf]"); if (f) { peopleFilter = f.dataset.pf; return render(); }
+    const del = e.target.closest("[data-del]"); if (del) act(del, async () => { await api("/people/" + del.closest(".person").dataset.id, "DELETE"); render(); });
+  };
+  v.onchange = (e) => { if (e.target.matches("[data-tag]")) act(null, async () => { await api("/people/" + e.target.closest(".person").dataset.id, "PUT", { tag: e.target.value || null }); toast("Etichetta salvata"); }); };
+};
+
 // ---------- Feed (follows + inspirations) ----------
 let feedTab = "follows";
 views.feed = async (v) => {
@@ -590,6 +741,9 @@ views.feed = async (v) => {
 // ---------- Impostazioni ----------
 views.settings = async (v) => {
   const s = settings = await api("/settings"); TZ = s.timezone; drawStatus();
+  // Europe first, then every zone the browser knows; the saved one is always present.
+  let zones = []; try { zones = Intl.supportedValuesOf("timeZone"); } catch { zones = ["Europe/Rome", "Europe/London", "America/New_York", "UTC"]; }
+  zones = [...new Set([s.timezone, ...zones.filter((z) => z.startsWith("Europe/")), ...zones])];
   v.innerHTML = `
     <div class="head"><div><h1>Impostazioni</h1><p class="lede">Collegamento a Substack, orari di pubblicazione e voce.</p></div></div>
     <div class="two">
@@ -598,19 +752,28 @@ views.settings = async (v) => {
         <div class="field"><label for="sCookie">Cookie di sessione Substack</label><input id="sCookie" type="password" autocomplete="off" placeholder="${s.has_cookie ? "Già salvato. Compila solo per sostituirlo" : "Incolla il valore di substack.sid"}">
           <span class="help">Su substack.com da loggato: F12, Application, Cookies, riga substack.sid. Viene salvato cifrato e non è più mostrato. Chi lo possiede può agire come te.</span></div>
         <div class="field"><label for="sSlots">Slot di pubblicazione giornalieri</label><input id="sSlots" class="mono" value="${esc(s.slots.join(", "))}"><span class="help">Orari nel formato HH:MM, separati da virgola.</span></div>
-        <div class="field"><label for="sTz">Fuso orario</label><input id="sTz" class="mono" value="${esc(s.timezone)}"></div>
-        <div class="field"><label for="sVoice">Istruzioni per la tua voce</label><textarea id="sVoice" placeholder="Per esempio: scrivo in italiano, tono diretto, frasi brevi, niente emoji né hashtag. Parlo di self-publishing a chi parte da zero.">${esc(s.voice_prompt)}</textarea><span class="help">Claude le segue ogni volta che genera, riscrive o suggerisce una risposta.</span></div>
+        <div class="field"><label for="sTz">Fuso orario</label><select id="sTz">${zones.map((z) => `<option ${z === s.timezone ? "selected" : ""}>${z}</option>`).join("")}</select><span class="help">Gli slot e le statistiche usano questo fuso.</span></div>
         <button class="btn" id="sSave">${icon("check")}Salva</button>
       </section>
       <section class="panel pad">
         <div class="row" style="margin-bottom:12px"><h2 class="grow">Stato del collegamento</h2><button class="ghost" id="sTest">Verifica ora</button></div>
         <div id="diag" class="list"><div class="item meta">${s.cookie_checked_at ? "Ultimo controllo del cookie: " + fmt(s.cookie_checked_at) + "." : "Mai verificato."} Il controllo si ripete da solo ogni 30 minuti.</div></div>
         ${s.last_sync_error ? `<p class="err">Ultima sincronizzazione: ${esc(s.last_sync_error)}</p>` : ""}
+        <div class="sec"><h2 class="grow">Esplorazione</h2><button class="ghost" id="sExplore">Esplora endpoint</button></div>
+        <p class="meta">Prova, in sola lettura, gli indirizzi interni di Substack che servirebbero alle prossime funzioni (articoli, restack, iscritti). Salva solo la forma delle risposte, mai i valori.</p>
+        <div id="explore" class="list" style="margin-top:10px"></div>
       </section>
     </div>`;
   $("#sSave").onclick = (e) => act(e.currentTarget, async () => {
-    await api("/settings", "PUT", { handle: $("#sHandle").value, cookie: $("#sCookie").value || undefined, timezone: $("#sTz").value.trim(), slots: $("#sSlots").value.split(","), voice_prompt: $("#sVoice").value });
+    await api("/settings", "PUT", { handle: $("#sHandle").value, cookie: $("#sCookie").value || undefined, timezone: $("#sTz").value, slots: $("#sSlots").value.split(",") });
     toast("Impostazioni salvate"); render();
+  });
+  $("#sExplore").onclick = (e) => act(e.currentTarget, async () => {
+    $("#explore").innerHTML = skel(3, 30);
+    try {
+      const r = await api("/explore", "POST");
+      $("#explore").innerHTML = `<div class="item meta">Provati ${r.tried}, funzionanti ${r.found}. Il risultato è salvato: dillo a Claude.</div>` + r.results.map((x) => `<div class="item row" style="padding:7px 2px"><span class="tag ${x.status === 200 ? "ok" : ""} mono">${x.status}</span><span class="meta mono grow" style="overflow-wrap:anywhere">${esc(x.url.replace(/^https:\/\/[^/]+\/api\/v1/, ""))}</span></div>`).join("");
+    } catch (err) { $("#explore").innerHTML = ""; throw err; }
   });
   $("#sTest").onclick = (e) => act(e.currentTarget, async () => {
     $("#diag").innerHTML = skel(4, 40);

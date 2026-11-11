@@ -40,6 +40,23 @@ export interface RemoteReply {
   body: string;
   date: number;
   answeredBy: number[]; // user ids found among the descendants
+  photoUrl: string | null;
+  pubName: string | null;
+  pubSubdomain: string | null;
+}
+
+export interface FullProfile {
+  id: number;
+  handle: string;
+  name: string | null;
+  photoUrl: string | null;
+  bio: string | null;
+  followers: number | null;
+  subscribers: string | null; // Substack only publishes a rounded figure, e.g. "8.2K+"
+  pubName: string | null;
+  pubSubdomain: string | null;
+  subscriptions: { name: string; subdomain: string | null; state: string; founding: boolean }[];
+  subscriptionsTruncated: boolean;
 }
 
 async function call(path: string, init: RequestInit = {}, sid?: string): Promise<any> {
@@ -95,6 +112,77 @@ export async function getProfile(handle: string) {
   };
 }
 
+/** Public profile with audience size and the publications this person publicly subscribes to. */
+export async function getFullProfile(handle: string, sid?: string): Promise<FullProfile> {
+  const p = await call(`/user/${encodeURIComponent(handle)}/public_profile`, {}, sid);
+  const pub = p.primaryPublication ?? (p.publicationUsers ?? []).find((u: any) => u.is_primary)?.publication ?? null;
+  return {
+    id: p.id,
+    handle: p.handle,
+    name: p.name ?? null,
+    photoUrl: p.photo_url ?? null,
+    bio: p.bio ?? null,
+    followers: typeof p.followerCount === "number" ? p.followerCount : null,
+    subscribers: p.subscriberCount ? String(p.subscriberCount) : null,
+    pubName: pub?.name ?? null,
+    pubSubdomain: pub?.subdomain ?? null,
+    subscriptions: (p.subscriptions ?? []).map((x: any) => ({
+      name: x.publication?.name ?? "?",
+      subdomain: x.publication?.subdomain ?? null,
+      state: String(x.membership_state ?? ""),
+      founding: !!x.is_founding,
+    })),
+    subscriptionsTruncated: !!p.subscriptionsTruncated,
+  };
+}
+
+/** Replies in a thread carry no handle; looking the reply up on its own does. */
+export async function getNoteAuthorHandle(noteId: string, sid?: string): Promise<string | null> {
+  const d = await call(`/reader/comment/${noteId}`, {}, sid);
+  return d?.item?.comment?.handle ?? null;
+}
+
+/** Published posts of a user with their public counters, newest first. */
+export async function getUserPosts(userId: number, limit = 12, sid?: string) {
+  const d = await call(`/profile/posts?profile_user_id=${userId}&limit=${limit}`, {}, sid);
+  return (d.posts ?? []).map((p: any) => ({
+    id: String(p.id),
+    title: String(p.title ?? ""),
+    url: String(p.canonical_url ?? ""),
+    date: Date.parse(p.post_date),
+    likes: p.reaction_count ?? 0,
+    comments: p.comment_count ?? 0,
+    restacks: p.restacks ?? 0,
+    words: p.wordcount ?? 0,
+    audience: String(p.audience ?? ""),
+  }));
+}
+
+/**
+ * Calls a GET endpoint and describes the shape of the answer without returning any value.
+ * Used to find out which undocumented endpoints exist for a signed-in account.
+ */
+export async function probe(url: string, sid: string) {
+  const shape = (v: any, depth: number): any => {
+    if (Array.isArray(v)) return depth <= 0 ? `array(${v.length})` : [`array(${v.length})`, v.length ? shape(v[0], depth - 1) : null];
+    if (v && typeof v === "object") return depth <= 0 ? "object" : Object.fromEntries(Object.keys(v).slice(0, 40).map((k) => [k, shape(v[k], depth - 1)]));
+    return v === null ? "null" : typeof v;
+  };
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json", Cookie: `substack.sid=${sid}` } });
+    const text = await res.text();
+    let body: any = null;
+    try {
+      body = shape(JSON.parse(text), 2);
+    } catch {
+      body = `non-JSON (${text.length} bytes)`;
+    }
+    return { url, status: res.status, shape: res.ok ? body : null };
+  } catch (e) {
+    return { url, status: 0, shape: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /** Notes written by a user, newest first. Follows `nextCursor` for up to `pages` pages. */
 export async function getUserNotes(userId: number, pages = 1, sid?: string): Promise<RemoteNote[]> {
   const out: RemoteNote[] = [];
@@ -122,6 +210,9 @@ export async function getReplies(noteId: string, sid?: string): Promise<RemoteRe
     body: b.comment.body ?? "",
     date: Date.parse(b.comment.date),
     answeredBy: (b.descendantComments ?? []).map((d: any) => d.comment?.user_id).filter(Boolean),
+    photoUrl: b.comment.photo_url ?? null,
+    pubName: b.comment.user_primary_publication?.name ?? null,
+    pubSubdomain: b.comment.user_primary_publication?.subdomain ?? null,
   }));
 }
 

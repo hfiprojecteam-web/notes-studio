@@ -4,6 +4,7 @@ import { Env, encrypt, getSettings, getSid, localParts, makeSession, nextSlots, 
 import { publishDue, publishOne, sync } from "./jobs";
 import { generateNotes } from "./generate";
 import * as substack from "./substack";
+import page from "../public/index.html";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -16,6 +17,8 @@ app.use("*", async (c, next) => {
   if (c.env.SUBSTACK_API_BASE) substack.setBase(c.env.SUBSTACK_API_BASE);
   await next();
 });
+
+app.get("/", (c) => c.html(page, 200, { "Cache-Control": "no-cache", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer" }));
 
 // ---------- auth ----------
 

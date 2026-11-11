@@ -43,7 +43,9 @@ export async function sync(env: Env, opts: { deep?: boolean } = {}) {
   const stmts: D1PreparedStatement[] = [];
 
   // 1. My notes and their metrics (deep = first import, goes further back)
-  const mine = await substack.getUserNotes(me, opts.deep ? 12 : 2);
+  // Signed-in requests are rate-limited per account instead of per (shared) Cloudflare address.
+  const sid = (await getSid(env, s)) ?? undefined;
+  const mine = await substack.getUserNotes(me, opts.deep ? 12 : 2, sid);
   for (const n of mine) {
     stmts.push(
       env.DB.prepare(
@@ -56,7 +58,7 @@ export async function sync(env: Env, opts: { deep?: boolean } = {}) {
   // 2. Replies to my recent notes that I have not answered
   const recent = mine.filter((n) => n.replies > 0 && now - n.date < 14 * 86400_000).slice(0, 12);
   for (const n of recent) {
-    const replies = await substack.getReplies(n.id);
+    const replies = await substack.getReplies(n.id, sid);
     for (const r of replies) {
       if (r.userId === me) continue;
       if (r.answeredBy.includes(me)) {
@@ -77,7 +79,7 @@ export async function sync(env: Env, opts: { deep?: boolean } = {}) {
   const errors: string[] = [];
   for (const f of follows.results) {
     try {
-      for (const n of await substack.getUserNotes(f.user_id, 1)) {
+      for (const n of await substack.getUserNotes(f.user_id, 1, sid)) {
         stmts.push(
           env.DB.prepare(
             `INSERT INTO feed_items (substack_id, handle, body, date, likes, restacks, replies) VALUES (?,?,?,?,?,?,?)

@@ -105,7 +105,7 @@ app.get("/api/diagnostics", async (c) => {
   });
   await run("Lettura Notes", async () => {
     if (!s.user_id) throw new Error("Handle non impostato");
-    return `${(await substack.getUserNotes(Number(s.user_id), 1)).length} Notes nella prima pagina`;
+    return `${(await substack.getUserNotes(Number(s.user_id), 1, (await getSid(c.env, s)) ?? undefined)).length} Notes nella prima pagina`;
   });
   await run("Cookie di sessione", async () => {
     const sid = await getSid(c.env, s);

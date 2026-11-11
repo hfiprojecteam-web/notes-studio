@@ -47,10 +47,16 @@ async function call(path: string, init: RequestInit = {}, sid?: string): Promise
   headers.set("User-Agent", UA);
   headers.set("Accept", "application/json");
   if (sid) headers.set("Cookie", `substack.sid=${sid}`);
-  const res = await fetch(`${BASE}${path}`, { ...init, headers });
+  let res = await fetch(`${BASE}${path}`, { ...init, headers });
+  // Reads are safe to repeat: on a rate limit wait briefly and try once more. Writes are never retried.
+  if (res.status === 429 && (init.method ?? "GET") === "GET") {
+    const wait = Math.min(Number(res.headers.get("Retry-After")) || 3, 8);
+    await new Promise((r) => setTimeout(r, wait * 1000));
+    res = await fetch(`${BASE}${path}`, { ...init, headers });
+  }
   const text = await res.text();
   if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
+    let msg = res.status === 429 ? "Substack sta limitando le richieste (HTTP 429): riprova tra qualche minuto" : `HTTP ${res.status}`;
     try {
       msg = JSON.parse(text).errors?.[0]?.msg ?? msg;
     } catch {
@@ -90,12 +96,12 @@ export async function getProfile(handle: string) {
 }
 
 /** Notes written by a user, newest first. Follows `nextCursor` for up to `pages` pages. */
-export async function getUserNotes(userId: number, pages = 1): Promise<RemoteNote[]> {
+export async function getUserNotes(userId: number, pages = 1, sid?: string): Promise<RemoteNote[]> {
   const out: RemoteNote[] = [];
   let cursor: string | null = null;
   for (let i = 0; i < pages; i++) {
     const q: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
-    const data = await call(`/reader/feed/profile/${userId}?types=note${q}`);
+    const data = await call(`/reader/feed/profile/${userId}?types=note${q}`, {}, sid);
     for (const item of data.items ?? []) {
       // Skip restacks of other people's notes: keep only notes authored by this user.
       if (item.type === "comment" && item.comment?.user_id === userId) out.push(toNote(item.comment));
@@ -106,8 +112,8 @@ export async function getUserNotes(userId: number, pages = 1): Promise<RemoteNot
   return out;
 }
 
-export async function getReplies(noteId: string): Promise<RemoteReply[]> {
-  const data = await call(`/reader/comment/${noteId}/replies`);
+export async function getReplies(noteId: string, sid?: string): Promise<RemoteReply[]> {
+  const data = await call(`/reader/comment/${noteId}/replies`, {}, sid);
   return (data.commentBranches ?? []).map((b: any) => ({
     id: String(b.comment.id),
     userId: b.comment.user_id,

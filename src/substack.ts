@@ -12,11 +12,10 @@ export function setBase(url: string) {
 const UA = "notes-studio/1.0";
 
 export class SubstackError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-  ) {
+  status: number;
+  constructor(message: string, status: number) {
     super(message);
+    this.status = status;
   }
 }
 
@@ -168,7 +167,9 @@ export async function getNoteStats(noteId: string, sid: string): Promise<NoteSta
 
 /** Where new subscribers of my publication came from, as Substack's own dashboard reports it. */
 export async function getGrowthSources(subdomain: string, days: number, sid: string): Promise<any> {
-  const res = await fetch(`https://${subdomain}.substack.com/api/v1/publication/stats/growth/sources?days=${days}`, {
+  // In tests the publication's own address is served by the same stand-in as the rest.
+  const base = BASE.startsWith("https://substack.com") ? `https://${subdomain}.substack.com/api/v1` : `${BASE}/pub/${subdomain}`;
+  const res = await fetch(`${base}/publication/stats/growth/sources?days=${days}`, {
     headers: { "User-Agent": UA, Accept: "application/json", Cookie: `substack.sid=${sid}` },
   });
   if (!res.ok) throw new SubstackError(`Fonti di crescita non disponibili (HTTP ${res.status})`, res.status);

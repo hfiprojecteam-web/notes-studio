@@ -77,3 +77,21 @@ npx wrangler dev --test-scheduled
 - `src/generate.ts` — generatore (Claude)
 - `src/index.ts` — API e cron
 - `public/index.html` — interfaccia
+
+## Controlli
+
+```bash
+npm test
+```
+
+Prova le parti che non devono rompersi: orari e fusi (compreso il cambio d'ora), slot liberi, regola di riscrittura degli spunti, formato del testo inviato a Substack.
+
+```bash
+npm run check
+```
+
+Controlla i tipi di tutto il codice.
+
+`tools/i18n-audit.js` apre ogni schermata in inglese su un'istanza locale e scrive le stringhe rimaste in italiano. Serve un Substack simulato in ascolto (vedi `SUBSTACK_API_BASE` in `.dev.vars`).
+
+Gli errori imprevisti del server finiscono tra gli avvisi dell'app, uno per errore distinto all'ora.

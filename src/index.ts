@@ -11,8 +11,19 @@ import { UI_LANGS } from "./i18n";
 
 const app = new Hono<{ Bindings: Env }>();
 
-app.onError((err, c) => {
+app.onError(async (err, c) => {
   const status = err instanceof substack.SubstackError && err.status === 401 ? 502 : 500;
+  // Errors that are not an answer from Substack or a message meant for the writer are bugs: keep a trace of them.
+  // One alert per distinct error per hour, so a broken screen cannot flood the list.
+  const expected = err instanceof substack.SubstackError || /^(Substack:|La scrittura|ANTHROPIC_API_KEY|Claude ha rifiutato|Risposta troncata|Imposta prima|Cookie Substack|Network connection lost|fetch failed)/.test(err.message);
+  if (!expected) {
+    const where = `${c.req.method} ${new URL(c.req.url).pathname}`;
+    try {
+      await raiseAlert(c.env, "error", "Errore imprevisto nell'app", `${where}: ${err.message}`, `err:${where}:${err.message.slice(0, 80)}:${Math.floor(Date.now() / 3600_000)}`);
+    } catch {
+      /* the alert itself must never hide the original error */
+    }
+  }
   return c.json({ error: err.message }, status);
 });
 
@@ -884,14 +895,18 @@ app.get("/api/sources", async (c) => {
   if (!sid || !s.pub_subdomain) return c.json({ error: "Servono il cookie e una pubblicazione: riprova dopo il prossimo aggiornamento dei dati" }, 400);
   const days = Math.min(Math.max(Number(c.req.query("days")) || 30, 7), 365);
   const d = await substack.getGrowthSources(s.pub_subdomain, days, sid);
-  // Pass on only names and numbers: the dashboard payload also carries logos and other noise.
-  const slim = (m: any) => (m && typeof m === "object" ? Object.fromEntries(Object.entries(m).filter(([, v]) => typeof v === "number" || typeof v === "string").slice(0, 8)) : m);
+  // Each source carries three metrics (traffic, subscribers, revenue): keep just those numbers.
+  const pick = (metrics: any[]) => {
+    const get = (word: string) => (metrics ?? []).find((m) => String(m?.name ?? "").toLowerCase().startsWith(word))?.total ?? null;
+    return { traffic: get("traffic"), subscribers: get("subscriber"), revenue: get("revenue") };
+  };
   return c.json({
     days,
-    totals: (d.totals ?? []).map(slim),
+    totals: pick(d.totals),
     sources: (d.sourceMetrics ?? []).map((x: any) => ({
-      name: x.sourceName ?? x.source, category: x.category, metrics: (x.metrics ?? []).map(slim),
-      children: (x.children ?? []).map((ch: any) => ({ name: ch.sourceName ?? ch.source, metrics: (ch.metrics ?? []).map(slim) })),
+      name: x.sourceName ?? x.source,
+      ...pick(x.metrics),
+      children: (x.children ?? []).map((ch: any) => ({ name: ch.sourceName ?? ch.source, ...pick(ch.metrics) })),
     })),
   });
 });

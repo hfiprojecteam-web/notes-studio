@@ -299,6 +299,14 @@ const LOCALES = { it: "it-IT", en: "en-GB", de: "de-DE", es: "es-ES", ru: "ru-RU
 const LANG_NAMES = { it: "Italiano", en: "English", de: "Deutsch", es: "Español", ru: "Русский", fr: "Français", hi: "हिन्दी", pt: "Português (Brasil)" };
 let LANG = "it", DICT = null;
 try { LANG = localStorage.getItem("lang") || "it"; } catch {}
+// A translation may hold several forms separated by " ||| ", one per plural category of the language
+// (in the order Intl.PluralRules lists them, e.g. one ||| other, or one ||| few ||| many ||| other).
+function plural(t, num) {
+  if (!t.includes(" ||| ")) return t;
+  const forms = t.split(" ||| "), rules = new Intl.PluralRules(LOCALES[LANG]), cats = rules.resolvedOptions().pluralCategories;
+  const i = cats.indexOf(rules.select(Number(String(num).replace(",", "."))));
+  return forms[i >= 0 && i < forms.length ? i : forms.length - 1];
+}
 function tr(text) {
   if (!DICT || !text) return text;
   const core = text.trim(); if (!core) return text;
@@ -306,7 +314,7 @@ function tr(text) {
   if (out === undefined) {
     const nums = []; const key = core.replace(/\d+(?:[.,]\d+)?/g, (m) => { nums.push(m); return "#"; });
     const t = nums.length ? DICT[key] : undefined;
-    if (t !== undefined) { let i = 0; out = t.replace(/#/g, () => nums[i++] ?? ""); }
+    if (t !== undefined) { let i = 0; out = plural(t, nums[0]).replace(/#/g, () => nums[i++] ?? ""); }
   }
   return out === undefined ? text : text.replace(core, out);
 }
@@ -324,7 +332,7 @@ function translateTree(root) {
 async function setLang(l) {
   LANG = l in LOCALES ? l : "it"; DICT = null; try { localStorage.setItem("lang", LANG); } catch {}
   document.documentElement.lang = LOCALES[LANG].slice(0, 2);
-  if (LANG !== "it") { try { DICT = await (await fetch("/i18n/" + LANG)).json(); } catch { DICT = null; } }
+  try { DICT = await (await fetch("/i18n/" + LANG)).json(); } catch { DICT = null; }
   translateTree(document.body);
 }
 new MutationObserver((ms) => { for (const m of ms) { if (m.type === "characterData") translateTree(m.target); else m.addedNodes.forEach(translateTree); } })
@@ -817,6 +825,8 @@ views.activity = async (v) => {
 
 // ---------- Persone ----------
 let peopleTab = "circle", peopleFilter = "", peopleSide = "subs", creatorFilter = "";
+// A tag names one person; the same tag used as a filter names a group, so it is shown in the plural.
+const TAG_GROUP = { lettore: "Lettori", "potenziale cliente": "Potenziali clienti", cliente: "Clienti", ambasciatore: "Ambasciatori", imprenditore: "Imprenditori", competitor: "Competitor", coopetitor: "Coopetitor", affine: "Affini", ispirazione: "Ispirazioni" };
 const sideSwitch = (subs, creators) => `<div class="side"><button data-side="subs" class="${peopleSide === "subs" ? "on" : ""}">${icon("users")}<span>Iscritti</span> <span class="mono">${subs}</span></button><button data-side="creators" class="${peopleSide === "creators" ? "on" : ""}">${icon("chart")}<span>Creator</span> <span class="mono">${creators}</span></button></div>`;
 const avatar = (p) => p.photo_url ? `<img class="avatar" src="${esc(p.photo_url)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="avatar" data-nt>${esc((p.name || "?")[0])}</span>`;
 
@@ -842,13 +852,13 @@ function viewCreators(v, d, subsCount) {
       </div>
       <div style="display:grid;gap:8px;justify-items:end">
         <label class="switch" style="border:0;padding:0;gap:8px;align-items:center"><span>Osserva</span><input type="checkbox" data-watch ${p.watched ? "checked" : ""}></label>
-        <select class="auto" data-tag aria-label="Etichetta"><option value="">Senza etichetta</option>${d.creator_tags.map((t) => `<option ${p.tag === t ? "selected" : ""}>${t}</option>`).join("")}</select>
+        <select class="auto" data-tag aria-label="Etichetta"><option value="">Senza etichetta</option>${d.creator_tags.map((t) => `<option value="${t}" ${p.tag === t ? "selected" : ""}>${t}</option>`).join("")}</select>
         ${p.watched && settings.ai_drafts ? `<button class="ghost" data-topics>${icon("wand")}Analizza argomenti</button>` : ""}
         <div class="row"><button class="quiet" data-tosub title="Sposta tra gli iscritti">${icon("users")}</button><button class="quiet danger" data-del title="Rimuovi">${icon("x")}</button></div>
       </div></div>`; };
   v.innerHTML = `
     <div class="head"><div><h1>Persone</h1><p class="lede">I creator che studi: competitor, coopetitor, affini. Per quelli in osservazione l'app legge una volta al giorno Notes, articoli e profilo pubblici, e ne ricava frequenza, formati e risultati.</p></div>${sideSwitch(subsCount, all.length)}</div>
-    <div class="row" style="margin-bottom:18px;gap:12px"><div class="tabs"><button data-cf="" class="${creatorFilter ? "" : "on"}">Tutti</button>${d.creator_tags.map((t) => `<button data-cf="${t}" class="${creatorFilter === t ? "on" : ""}">${t}</button>`).join("")}</div>
+    <div class="row" style="margin-bottom:18px;gap:12px"><div class="tabs"><button data-cf="" class="${creatorFilter ? "" : "on"}">Tutti</button>${d.creator_tags.map((t) => `<button data-cf="${t}" class="${creatorFilter === t ? "on" : ""}">${TAG_GROUP[t]}</button>`).join("")}</div>
       <span class="meta"><span>In osservazione</span> <span class="mono">${watched}/${d.watched_max}</span></span><span class="grow"></span>
       <input id="pHandle" class="auto" placeholder="@handle o link al profilo" style="width:220px"><button class="btn" id="pAdd">${icon("plus")}Aggiungi creator</button></div>
     <div class="list">${list.map(row).join("")}</div>
@@ -900,7 +910,7 @@ views.people = async (v) => {
     <div class="head"><div><h1>Persone</h1><p class="lede">Chi ti legge: la cerchia di chi segui da vicino e i suggerimenti su chi aggiungere. I messaggi li scrivi e li invii tu: l'app prepara, ricorda e tiene il registro.</p></div>
       ${sideSwitch(subs.length, creatorsCount)}</div>
     <div class="row" style="margin-bottom:18px;gap:12px"><div class="tabs"><button data-pt="circle" class="${peopleTab === "circle" ? "on" : ""}">Cerchia <span class="mono">${circle.length}</span></button><button data-pt="suggested" class="${peopleTab === "suggested" ? "on" : ""}">Suggeriti <span class="mono">${suggested.length}</span></button><button data-pt="all" class="${peopleTab === "all" ? "on" : ""}">Tutti <span class="mono">${subs.length}</span></button></div>
-      <select id="pTag" class="auto"><option value="">Tutte le etichette</option>${d.sub_tags.map((t) => `<option ${peopleFilter === t ? "selected" : ""}>${t}</option>`).join("")}</select><span class="grow"></span><input id="pHandle" class="auto" placeholder="@handle o link al profilo" style="width:220px"><button class="btn" id="pAdd">${icon("plus")}Cerca e aggiungi</button></div>
+      <select id="pTag" class="auto"><option value="">Tutte le etichette</option>${d.sub_tags.map((t) => `<option value="${t}" ${peopleFilter === t ? "selected" : ""}>${TAG_GROUP[t]}</option>`).join("")}</select><span class="grow"></span><input id="pHandle" class="auto" placeholder="@handle o link al profilo" style="width:220px"><button class="btn" id="pAdd">${icon("plus")}Cerca e aggiungi</button></div>
     <div class="list">${list.map(row).join("")}</div>
     ${list.length ? "" : empty(...(peopleFilter ? ["Nessuno con questa etichetta", "Cambia etichetta o scheda."] : empties[peopleTab]))}
     <p class="meta" style="margin-top:16px;max-width:70ch">Che qualcuno sia tuo iscritto lo leggo dai suoi abbonamenti pubblici: chi li tiene privati non risulta, e puoi segnarlo a mano nella scheda. Il numero di iscritti di ciascuno è arrotondato da Substack.</p>`;
@@ -928,7 +938,7 @@ async function openPerson(p, tags) {
     ${p.reasons.length ? `<div class="subs">${p.reasons.map((r) => `<span class="tag">${r}</span>`).join("")}</div>` : ""}
     <div class="cols">
       <div class="field" style="margin:0"><label for="cSub">Rapporto con te</label><select id="cSub"><option value="">Come risulta dal profilo pubblico</option>${Object.entries(SUB_LABEL).map(([k, l]) => `<option value="${k}" ${p.sub_manual === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
-      <div class="field" style="margin:0"><label for="cTag">Etichetta</label><select id="cTag"><option value="">Senza etichetta</option>${tags.map((t) => `<option ${p.tag === t ? "selected" : ""}>${t}</option>`).join("")}</select></div>
+      <div class="field" style="margin:0"><label for="cTag">Etichetta</label><select id="cTag"><option value="">Senza etichetta</option>${tags.map((t) => `<option value="${t}" ${p.tag === t ? "selected" : ""}>${t}</option>`).join("")}</select></div>
       <div class="field" style="margin:0"><label for="cNext">Prossimo passo</label><input id="cNext" value="${esc(p.next_step || "")}" placeholder="Per esempio: chiedere cosa sta scrivendo"></div>
       <div class="field" style="margin:0"><label for="cDate">Quando</label><input id="cDate" type="date" value="${dateIn(p.next_date)}"></div>
     </div>

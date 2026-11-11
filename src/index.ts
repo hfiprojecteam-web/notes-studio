@@ -7,6 +7,7 @@ import { EMPTY_PROFILE, Voice, VoiceProfile, analyzeVoice, composeVoice, analyze
 import * as substack from "./substack";
 import page from "../public/index.html";
 
+import it from "../i18n/it.json";
 import en from "../i18n/en.json";
 import de from "../i18n/de.json";
 import es from "../i18n/es.json";
@@ -17,7 +18,7 @@ import pt from "../i18n/pt.json";
 
 /** Interface languages. Italian is the source text; the others are dictionaries keyed by the Italian string. */
 const UI_LANGS: Record<string, { name: string; dict: Record<string, string> | null }> = {
-  it: { name: "Italian", dict: null },
+  it: { name: "Italian", dict: it },
   en: { name: "English", dict: en },
   de: { name: "German", dict: de },
   es: { name: "Spanish", dict: es },
@@ -727,7 +728,7 @@ app.get("/api/people", async (c) => {
     if (p.sub_state === "paid") { score += 6; reasons.push("È tuo abbonato a pagamento"); }
     if (p.sub_state === "free") { score += 4; reasons.push("È iscritto alla tua pubblicazione"); }
     if (p.interactions >= 2) { score += 3; reasons.push(`Ti ha risposto ${p.interactions} volte`); }
-    else if (p.interactions === 1) { score += 1; reasons.push("Ti ha risposto 1 volta"); }
+    else if (p.interactions === 1) { score += 1; reasons.push("Ti ha risposto 1 volte"); }
     if (paysOthers) { score += 2; reasons.push(`Paga già ${paysOthers} newsletter`); }
     if ((p.followers ?? 0) >= 1000) { score += 2; reasons.push(`Ha ${p.followers} follower`); }
     p.reasons = reasons;

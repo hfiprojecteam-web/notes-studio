@@ -180,6 +180,13 @@
   .switch input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
   .switch b { font-weight: 500; display: block; } .switch span { font-size: 13px; color: var(--muted); }
 
+  .side { display: inline-flex; padding: 4px; background: var(--sunken); border-radius: 14px; gap: 2px; border: 1px solid var(--line); }
+  .side button { border: 0; background: none; padding: 10px 22px; border-radius: 10px; font: 600 15px/1 inherit; color: var(--muted); cursor: pointer; transition: all .3s var(--ease); display: inline-flex; gap: 8px; align-items: center; }
+  .side button.on { background: var(--accent); color: var(--accent-ink); }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 10px 16px; }
+  .kpis b { display: block; font: 500 18px/1.2 "Geist Mono", monospace; letter-spacing: -.02em; } .kpis span { font-size: 12px; color: var(--muted); }
+  .creator { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 16px; align-items: start; }
+  @media (max-width: 820px) { .creator { grid-template-columns: 44px minmax(0, 1fr); } .creator > :nth-child(3) { grid-column: 2; } }
   /* people */
   .person { display: grid; grid-template-columns: 44px minmax(0, 1.3fr) minmax(0, 2fr) auto; gap: 16px; align-items: start; }
   .avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: var(--sunken); display: grid; place-items: center; font-weight: 600; color: var(--muted); }
@@ -809,12 +816,65 @@ views.activity = async (v) => {
 };
 
 // ---------- Persone ----------
-let peopleTab = "circle", peopleFilter = "";
+let peopleTab = "circle", peopleFilter = "", peopleSide = "subs", creatorFilter = "";
+const sideSwitch = (subs, creators) => `<div class="side"><button data-side="subs" class="${peopleSide === "subs" ? "on" : ""}">${icon("users")}<span>Iscritti</span> <span class="mono">${subs}</span></button><button data-side="creators" class="${peopleSide === "creators" ? "on" : ""}">${icon("chart")}<span>Creator</span> <span class="mono">${creators}</span></button></div>`;
+const avatar = (p) => p.photo_url ? `<img class="avatar" src="${esc(p.photo_url)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="avatar" data-nt>${esc((p.name || "?")[0])}</span>`;
+
+function viewCreators(v, d, subsCount) {
+  const all = d.people.filter((p) => p.kind === "creator"), watched = all.filter((p) => p.watched).length;
+  const list = all.filter((p) => !creatorFilter || p.tag === creatorFilter).sort((a, b) => (b.watched - a.watched) || ((b.followers || 0) - (a.followers || 0)));
+  const kpi = (val, label) => val == null ? "" : `<div><b>${val}</b><span>${label}</span></div>`;
+  const row = (p, i) => { const r = p.radar || {};
+    return `<div class="item creator" data-id="${p.user_id}" style="--i:${Math.min(i, 12)}">
+      ${avatar(p)}
+      <div>
+        <div class="row"><b style="font-weight:600" data-nt>${esc(p.name || p.handle || "?")}</b>${p.handle ? `<a class="meta" data-nt href="https://substack.com/@${esc(p.handle)}" target="_blank" rel="noopener">@${esc(p.handle)}</a>` : ""}${p.sub_state === "paid" || p.sub_state === "free" ? `<span class="tag ok">${SUB_LABEL[p.sub_state]}</span>` : ""}</div>
+        <div class="meta">${p.publication ? nt(p.publication) : "Nessuna pubblicazione"}</div>
+        ${p.watched ? `<div class="kpis" style="margin-top:12px">
+          ${kpi(p.followers, "follower")}${r.growth && r.growth.days > 1 ? kpi((r.growth.delta >= 0 ? "+" : "") + r.growth.delta, `in ${r.growth.days} giorni`) : ""}${kpi(p.subscribers ? nt(p.subscribers) : null, "iscritti")}
+          ${kpi(r.notes_per_day, "Notes al giorno")}${kpi(r.avg_interactions, "interazioni medie")}${kpi(r.with_link != null ? r.with_link + "%" : null, "Notes con link")}${kpi(r.avg_length, "caratteri in media")}${kpi(r.usual_hour != null ? r.usual_hour + ":00" : null, "ora più frequente")}
+          ${kpi(r.posts_per_week, "articoli a settimana")}${kpi(r.paid_share != null ? r.paid_share + "%" : null, "articoli riservati")}</div>
+          ${r.notes_seen ? "" : `<p class="meta" style="margin:10px 0 0">In osservazione: i primi dati arrivano con la prossima lettura giornaliera.</p>`}
+          ${r.top ? `<div style="margin-top:12px"><h2 style="margin-bottom:4px"><span>La sua Note migliore</span>${r.top.times ? ` · <span class="mono">${r.top.times}</span> <span>volte la sua media</span>` : ""}</h2><div class="body clamp">${esc(r.top.body)}</div></div>` : ""}
+          ${r.last_post ? `<div class="meta" style="margin-top:8px"><span>Ultimo articolo:</span> <a href="${esc(r.last_post.url)}" target="_blank" rel="noopener" data-nt>${esc(r.last_post.title)}</a> ${F(r.last_post.date, { day: "numeric", month: "short" })}</div>` : ""}
+          ${p.topics ? `<div style="margin-top:12px"><h2 style="margin-bottom:4px"><span>Argomenti e strategia</span> · ${F(p.topics.at, { day: "numeric", month: "short" })}</h2><div class="reader" style="font-size:14px" data-nt>${p.topics.items.map((t) => `<p>${esc(t)}</p>`).join("")}</div></div>` : ""}`
+        : `<p class="meta" style="margin:8px 0 0">Non in osservazione: attivala per raccogliere frequenza, formati e risultati.</p>`}
+      </div>
+      <div style="display:grid;gap:8px;justify-items:end">
+        <label class="switch" style="border:0;padding:0;gap:8px;align-items:center"><span>Osserva</span><input type="checkbox" data-watch ${p.watched ? "checked" : ""}></label>
+        <select class="auto" data-tag aria-label="Etichetta"><option value="">Senza etichetta</option>${d.creator_tags.map((t) => `<option ${p.tag === t ? "selected" : ""}>${t}</option>`).join("")}</select>
+        ${p.watched && settings.ai_drafts ? `<button class="ghost" data-topics>${icon("wand")}Analizza argomenti</button>` : ""}
+        <div class="row"><button class="quiet" data-tosub title="Sposta tra gli iscritti">${icon("users")}</button><button class="quiet danger" data-del title="Rimuovi">${icon("x")}</button></div>
+      </div></div>`; };
+  v.innerHTML = `
+    <div class="head"><div><h1>Persone</h1><p class="lede">I creator che studi: competitor, coopetitor, affini. Per quelli in osservazione l'app legge una volta al giorno Notes, articoli e profilo pubblici, e ne ricava frequenza, formati e risultati.</p></div>${sideSwitch(subsCount, all.length)}</div>
+    <div class="row" style="margin-bottom:18px;gap:12px"><div class="tabs"><button data-cf="" class="${creatorFilter ? "" : "on"}">Tutti</button>${d.creator_tags.map((t) => `<button data-cf="${t}" class="${creatorFilter === t ? "on" : ""}">${t}</button>`).join("")}</div>
+      <span class="meta"><span>In osservazione</span> <span class="mono">${watched}/${d.watched_max}</span></span><span class="grow"></span>
+      <input id="pHandle" class="auto" placeholder="@handle o link al profilo" style="width:220px"><button class="btn" id="pAdd">${icon("plus")}Aggiungi creator</button></div>
+    <div class="list">${list.map(row).join("")}</div>
+    ${list.length ? "" : empty(creatorFilter ? "Nessun creator con questa etichetta" : "Nessun creator ancora", "Aggiungi un profilo con il campo qui sopra, dagli un'etichetta e attiva Osserva per iniziare a raccogliere i dati.")}`;
+  $("#pAdd").onclick = (e) => act(e.currentTarget, async () => { const r = await api("/people", "POST", { handle: $("#pHandle").value, kind: "creator" }); if (watched < d.watched_max) await api(`/people/${r.user_id}/watch`, "POST", { on: true }); toast(tr("Aggiunto") + " " + (r.name || "")); render(); });
+  v.onclick = (e) => {
+    const sd = e.target.closest("[data-side]"); if (sd) { peopleSide = sd.dataset.side; return render(); }
+    const cf = e.target.closest("[data-cf]"); if (cf) { creatorFilter = cf.dataset.cf; return render(); }
+    const el = e.target.closest(".creator"), b = e.target.closest("button"); if (!el || !b) return; const id = el.dataset.id;
+    if (b.dataset.del !== undefined) act(b, async () => { if (!confirm("Rimuovere questa persona e i suoi dati dall'app?")) return; await api(`/people/${id}/watch`, "POST", { on: false }); await api("/people/" + id, "DELETE"); render(); });
+    if (b.dataset.tosub !== undefined) act(b, async () => { await api("/people/" + id, "PUT", { kind: "iscritto", tag: null }); render(); });
+    if (b.dataset.topics !== undefined) act(b, async () => { toast("Sto leggendo i suoi contenuti, può volerci un minuto"); await api(`/people/${id}/topics`, "POST"); render(); });
+  };
+  v.onchange = (e) => { const el = e.target.closest(".creator"); if (!el) return; const id = el.dataset.id;
+    if (e.target.matches("[data-tag]")) act(null, async () => { await api("/people/" + id, "PUT", { tag: e.target.value || null }); toast("Etichetta salvata"); });
+    if (e.target.matches("[data-watch]")) act(null, async () => { try { await api(`/people/${id}/watch`, "POST", { on: e.target.checked }); } finally { render(); } });
+  };
+}
+
 const SUB_LABEL = { paid: "Tuo abbonato a pagamento", free: "Tuo iscritto", none: "Non iscritto" };
 views.people = async (v) => {
   const d = await api("/people");
-  const circle = d.people.filter((p) => p.circle), suggested = d.people.filter((p) => p.suggested).sort((a, b) => b.score - a.score);
-  const base = peopleTab === "circle" ? circle : peopleTab === "suggested" ? suggested : d.people;
+  const subs = d.people.filter((p) => p.kind !== "creator"), creatorsCount = d.people.length - subs.length;
+  if (peopleSide === "creators") return viewCreators(v, d, subs.length);
+  const circle = subs.filter((p) => p.circle), suggested = subs.filter((p) => p.suggested).sort((a, b) => b.score - a.score);
+  const base = peopleTab === "circle" ? circle : peopleTab === "suggested" ? suggested : subs;
   const list = base.filter((p) => !peopleFilter || p.tag === peopleFilter);
   // Substack marks free sign-ups as "free_signup"; "subscribed" is a paying subscription.
   const stateLabel = (x) => x.founding ? "fondatore" : x.state === "subscribed" ? "a pagamento" : x.state === "free_signup" ? "" : x.state.replace(/_/g, " ");
@@ -831,27 +891,30 @@ views.people = async (v) => {
           : p.subscriptions.length ? `<div class="subs">${p.subscriptions.slice(0, 10).map((x) => `<span class="tag ${stateLabel(x) ? "ok" : ""}" title="${esc(x.state)}" data-nt>${esc(x.name)}${stateLabel(x) ? " · " + esc(tr(stateLabel(x))) : ""}</span>`).join("")}${p.subscriptions.length > 10 ? `<span class="meta">e altre ${p.subscriptions.length - 10}</span>` : ""}</div>`
           : '<span class="meta">Nessun abbonamento pubblico.</span>'}`}</div>
       <div class="row">${p.circle ? `<button class="ghost" data-open>${icon("pen")}Scheda</button>` : `<button class="${peopleTab === "suggested" ? "btn" : "ghost"}" data-circle>${icon("plus")}Nella cerchia</button>`}
+        <button class="quiet" data-tocreator title="Sposta tra i creator">${icon("chart")}</button>
         ${peopleTab === "suggested" ? `<button class="quiet" data-dismiss>Ignora</button>` : `<button class="quiet danger" data-del title="Rimuovi">${icon("x")}</button>`}</div></div>`;
   const empties = { circle: ["La tua cerchia è vuota", "Sono le persone che scegli di seguire da vicino. Aggiungile dai Suggeriti, da Tutti, o cercando un profilo con il campo in alto."],
     suggested: ["Nessun suggerimento per ora", "Qui compaiono le persone che ti rispondono, che risultano iscritte alla tua pubblicazione o che pagano già altre newsletter. I profili si leggono una volta al giorno."],
     all: ["Ancora nessuno", "Qui compare chi risponde alle tue Notes. Puoi anche cercare qualsiasi profilo Substack con il campo in alto."] };
   v.innerHTML = `
-    <div class="head"><div><h1>Persone</h1><p class="lede">La cerchia di chi segui da vicino, e i suggerimenti su chi aggiungere. I messaggi li scrivi e li invii tu: l'app prepara, ricorda e tiene il registro.</p></div>
-      <div class="row"><input id="pHandle" class="grow" placeholder="@handle o link al profilo" style="min-width:170px"><button class="btn" id="pAdd">${icon("plus")}Cerca e aggiungi</button></div></div>
-    <div class="row" style="margin-bottom:18px;gap:12px"><div class="tabs"><button data-pt="circle" class="${peopleTab === "circle" ? "on" : ""}">Cerchia <span class="mono">${circle.length}</span></button><button data-pt="suggested" class="${peopleTab === "suggested" ? "on" : ""}">Suggeriti <span class="mono">${suggested.length}</span></button><button data-pt="all" class="${peopleTab === "all" ? "on" : ""}">Tutti <span class="mono">${d.people.length}</span></button></div>
-      <select id="pTag" class="auto"><option value="">Tutte le etichette</option>${d.tags.map((t) => `<option ${peopleFilter === t ? "selected" : ""}>${t}</option>`).join("")}</select></div>
+    <div class="head"><div><h1>Persone</h1><p class="lede">Chi ti legge: la cerchia di chi segui da vicino e i suggerimenti su chi aggiungere. I messaggi li scrivi e li invii tu: l'app prepara, ricorda e tiene il registro.</p></div>
+      ${sideSwitch(subs.length, creatorsCount)}</div>
+    <div class="row" style="margin-bottom:18px;gap:12px"><div class="tabs"><button data-pt="circle" class="${peopleTab === "circle" ? "on" : ""}">Cerchia <span class="mono">${circle.length}</span></button><button data-pt="suggested" class="${peopleTab === "suggested" ? "on" : ""}">Suggeriti <span class="mono">${suggested.length}</span></button><button data-pt="all" class="${peopleTab === "all" ? "on" : ""}">Tutti <span class="mono">${subs.length}</span></button></div>
+      <select id="pTag" class="auto"><option value="">Tutte le etichette</option>${d.sub_tags.map((t) => `<option ${peopleFilter === t ? "selected" : ""}>${t}</option>`).join("")}</select><span class="grow"></span><input id="pHandle" class="auto" placeholder="@handle o link al profilo" style="width:220px"><button class="btn" id="pAdd">${icon("plus")}Cerca e aggiungi</button></div>
     <div class="list">${list.map(row).join("")}</div>
     ${list.length ? "" : empty(...(peopleFilter ? ["Nessuno con questa etichetta", "Cambia etichetta o scheda."] : empties[peopleTab]))}
     <p class="meta" style="margin-top:16px;max-width:70ch">Che qualcuno sia tuo iscritto lo leggo dai suoi abbonamenti pubblici: chi li tiene privati non risulta, e puoi segnarlo a mano nella scheda. Il numero di iscritti di ciascuno è arrotondato da Substack.</p>`;
   $("#pAdd").onclick = (e) => act(e.currentTarget, async () => { const r = await api("/people", "POST", { handle: $("#pHandle").value }); toast(tr("Aggiunto") + " " + (r.name || "")); peopleTab = "circle"; render(); });
   $("#pTag").onchange = (e) => { peopleFilter = e.target.value; render(); };
   v.onclick = (e) => {
+    const sd = e.target.closest("[data-side]"); if (sd) { peopleSide = sd.dataset.side; return render(); }
     const t = e.target.closest("[data-pt]"); if (t) { peopleTab = t.dataset.pt; return render(); }
+    const mv = e.target.closest("[data-tocreator]"); if (mv) return act(mv, async () => { await api("/people/" + mv.closest(".person").dataset.id, "PUT", { kind: "creator", tag: null }); toast("Spostato tra i creator"); render(); });
     const el = e.target.closest(".person"); if (!el) return; const id = el.dataset.id, b = e.target.closest("button"); if (!b) return;
     if (b.dataset.del !== undefined) act(b, async () => { if (!confirm("Rimuovere questa persona e i suoi dati dall'app?")) return; await api("/people/" + id, "DELETE"); render(); });
     if (b.dataset.circle !== undefined) act(b, async () => { await api("/people/" + id, "PUT", { circle: true }); toast("Aggiunta alla cerchia"); render(); });
     if (b.dataset.dismiss !== undefined) act(b, async () => { await api("/people/" + id, "PUT", { dismissed: true }); render(); });
-    if (b.dataset.open !== undefined) openPerson(d.people.find((p) => p.user_id == id), d.tags);
+    if (b.dataset.open !== undefined) openPerson(d.people.find((p) => p.user_id == id), d.sub_tags);
   };
 };
 

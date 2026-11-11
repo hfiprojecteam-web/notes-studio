@@ -194,3 +194,12 @@ export async function personalMessage(apiKey: string, v: Voice, kind: MessageKin
   ].join("\n\n");
   return (await askList(apiKey, WRITER, user))[0] ?? "";
 }
+
+/** What a creator writes about and how, from their recent notes and post titles. An analysis, not a draft. */
+export async function analyzeCreator(apiKey: string, language: string, creator: { name: string; notes: string[]; posts: string[] }) {
+  const user = [
+    `<creator name="${creator.name}">\n<post_titles>\n${creator.posts.map((t) => `- ${t}`).join("\n")}\n</post_titles>\n<notes>\n${creator.notes.map((n, i) => `<note index="${i + 1}">\n${n}\n</note>`).join("\n")}\n</notes>\n</creator>`,
+    `Describe how this Substack creator works, for another writer studying them. Return these items, each one a short line in ${language} starting with its label:\n1. the three to five subjects they return to, with a rough share of each\n2. the formats and structures they use most in Notes\n3. how they move readers towards subscribing or paying (calls to action, links, offers), as far as the texts show\n4. what clearly distinguishes them\nReport only what the texts show. If the sample is too small for a point, say so in that item.`,
+  ].join("\n\n");
+  return askList(apiKey, "You are an analyst of independent publishing who describes what is on the page and never speculates.", user);
+}

@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { Env, encrypt, getSettings, getSid, localParts, zonedToUtc, makeSession, nextSlots, passwordMatches, sessionValid, setSetting, madeOwn } from "./lib";
-import { checkCookie, personUpdate, publishOne, sync, tick } from "./jobs";
-import { EMPTY_PROFILE, Voice, VoiceProfile, analyzeVoice, composeVoice, generateNotes, generateOutlines, isMessageKind, personalMessage, isRewriteMode, remixInspiration, rewriteNote, suggestReply } from "./generate";
+import { checkCookie, personUpdate, publishOne, radarSync, sync, tick } from "./jobs";
+import { EMPTY_PROFILE, Voice, VoiceProfile, analyzeVoice, composeVoice, analyzeCreator, generateNotes, generateOutlines, isMessageKind, personalMessage, isRewriteMode, remixInspiration, rewriteNote, suggestReply } from "./generate";
 import * as substack from "./substack";
 import page from "../public/index.html";
 
@@ -530,6 +530,9 @@ app.post("/api/follows", async (c) => {
   await c.env.DB.prepare("INSERT OR REPLACE INTO follows (handle, user_id, name, photo_url, added_at) VALUES (?,?,?,?,?)")
     .bind(p.handle, p.id, p.name, p.photoUrl, Date.now())
     .run();
+  await c.env.DB.prepare("INSERT INTO people (user_id, handle, name, photo_url, kind, added_at) VALUES (?,?,?,?,'creator',?) ON CONFLICT(user_id) DO UPDATE SET kind = 'creator'")
+    .bind(p.id, p.handle, p.name, p.photoUrl, Date.now())
+    .run();
   const notes = await substack.getUserNotes(p.id, 1);
   if (notes.length) {
     await c.env.DB.batch(
@@ -588,7 +591,9 @@ app.delete("/api/materials/:id", async (c) => {
 
 // ---------- people ----------
 
-const TAGS = ["lettore", "creator", "imprenditore", "competitor", "coopetitor"];
+const SUB_TAGS = ["lettore", "potenziale cliente", "cliente", "ambasciatore", "imprenditore"];
+const CREATOR_TAGS = ["competitor", "coopetitor", "affine", "ispirazione"];
+const TAGS = [...SUB_TAGS, ...CREATOR_TAGS];
 
 /** Subscription to MY publication, read from the person's public subscriptions (or set by hand). */
 function subState(p: any, mySubdomain: string): "paid" | "free" | "none" | null {
@@ -608,8 +613,54 @@ app.get("/api/people", async (c) => {
      FROM people p LEFT JOIN activity a ON a.author_id = p.user_id
      GROUP BY p.user_id ORDER BY waiting DESC, interactions DESC, COALESCE(p.followers, 0) DESC LIMIT 300`,
   ).all();
+  const watched = new Set((await c.env.DB.prepare("SELECT user_id FROM follows").all<{ user_id: number }>()).results.map((r) => r.user_id));
+  const feed = (await c.env.DB.prepare("SELECT f.*, w.user_id FROM feed_items f JOIN follows w ON w.handle = f.handle").all<any>()).results;
+  const snaps = (await c.env.DB.prepare("SELECT user_id, MIN(day) AS d0, MAX(day) AS d1, COUNT(*) AS n FROM creator_snapshots GROUP BY user_id").all<any>()).results;
+  const firstLast = (await c.env.DB.prepare(
+    "SELECT s.user_id, s.day, s.followers FROM creator_snapshots s JOIN (SELECT user_id, MIN(day) AS d0, MAX(day) AS d1 FROM creator_snapshots GROUP BY user_id) m ON m.user_id = s.user_id AND (s.day = m.d0 OR s.day = m.d1)",
+  ).all<any>()).results;
+  const now = Date.now();
+  /** Habits and results of a watched creator, computed from what the daily read has collected so far. */
+  const radar = (r: any) => {
+    const notes = feed.filter((n) => n.user_id === r.user_id);
+    const posts: any[] = r.posts ? JSON.parse(r.posts) : [];
+    const out: any = { notes_seen: notes.length, posts_seen: posts.length };
+    if (notes.length) {
+      const span = Math.max(1, (now - Math.min(...notes.map((n) => n.date))) / 86400_000);
+      const eng = (n: any) => n.likes + n.restacks + n.replies;
+      const hours = new Map<number, number>();
+      for (const n of notes) { const h = localParts(n.date, s.timezone).h; hours.set(h, (hours.get(h) ?? 0) + 1); }
+      const top = [...notes].sort((a, b) => eng(b) - eng(a))[0];
+      const avg = notes.reduce((a, n) => a + eng(n), 0) / notes.length;
+      Object.assign(out, {
+        notes_per_day: +(notes.length / span).toFixed(1),
+        avg_interactions: +avg.toFixed(1),
+        with_link: Math.round((notes.filter((n) => /https?:\/\//.test(n.body)).length / notes.length) * 100),
+        avg_length: Math.round(notes.reduce((a, n) => a + n.body.length, 0) / notes.length),
+        usual_hour: [...hours.entries()].sort((a, b) => b[1] - a[1])[0][0],
+        top: { id: top.substack_id, body: top.body.slice(0, 220), interactions: eng(top), times: avg ? +(eng(top) / avg).toFixed(1) : null },
+      });
+    }
+    if (posts.length >= 2) {
+      const span = Math.max(1, (posts[0].date - posts[posts.length - 1].date) / (7 * 86400_000));
+      Object.assign(out, {
+        posts_per_week: +((posts.length - 1) / span).toFixed(1),
+        paid_share: Math.round((posts.filter((x) => x.audience && x.audience !== "everyone").length / posts.length) * 100),
+        last_post: { title: posts[0].title, url: posts[0].url, date: posts[0].date },
+      });
+    }
+    const fl = firstLast.filter((x) => x.user_id === r.user_id).sort((a, b) => (a.day < b.day ? -1 : 1));
+    const sn = snaps.find((x) => x.user_id === r.user_id);
+    if (fl.length && sn) out.growth = { delta: fl[fl.length - 1].followers - fl[0].followers, days: sn.n };
+    return out;
+  };
   const people = results.map((r: any) => {
-    const p = { ...r, subscriptions: r.subscriptions ? JSON.parse(r.subscriptions) : null };
+    const p = { ...r, subscriptions: r.subscriptions ? JSON.parse(r.subscriptions) : null, posts: undefined };
+    p.watched = watched.has(r.user_id);
+    // Two sides: the people who read me, and the creators I study. A creator who also subscribes stays a creator.
+    p.kind = r.kind ?? (p.watched || CREATOR_TAGS.includes(r.tag) ? "creator" : "iscritto");
+    if (p.kind === "creator") p.radar = radar(r);
+    p.topics = r.topics ? JSON.parse(r.topics) : null;
     p.sub_state = subState(p, s.pub_subdomain);
     // Why this person may be worth adding to the circle. Each reason is a fact, shown as is.
     const paysOthers = (p.subscriptions ?? []).filter((x: any) => x.subdomain !== s.pub_subdomain && (x.founding || x.state === "subscribed")).length;
@@ -623,33 +674,35 @@ app.get("/api/people", async (c) => {
     if ((p.followers ?? 0) >= 1000) { score += 2; reasons.push(`Ha ${p.followers} follower`); }
     p.reasons = reasons;
     p.score = score;
-    p.suggested = !p.circle && !p.dismissed && score >= 3;
+    p.suggested = p.kind !== "creator" && !p.circle && !p.dismissed && score >= 3;
     return p;
   });
-  return c.json({ tags: TAGS, people });
+  return c.json({ tags: TAGS, sub_tags: SUB_TAGS, creator_tags: CREATOR_TAGS, watched_max: 10, people });
 });
 
 /** Looks up any Substack profile by handle and stores it. */
 app.post("/api/people", async (c) => {
-  const { handle } = await c.req.json<{ handle: string }>();
+  const { handle, kind } = await c.req.json<{ handle: string; kind?: string }>();
   const clean = (handle ?? "").trim().replace(/^https?:\/\/substack\.com\/@/, "").replace(/^@/, "").split(/[/?]/)[0];
   if (!clean) return c.json({ error: "Handle mancante" }, 400);
   const sid = (await getSid(c.env, await getSettings(c.env))) ?? undefined;
   const p = await substack.getFullProfile(clean, sid);
   await personUpdate(c.env, p, Date.now()).run();
-  await c.env.DB.prepare("UPDATE people SET circle = 1, dismissed = 0 WHERE user_id = ?").bind(p.id).run();
+  if (kind === "creator") await c.env.DB.prepare("UPDATE people SET kind = 'creator' WHERE user_id = ?").bind(p.id).run();
+  else await c.env.DB.prepare("UPDATE people SET kind = 'iscritto', circle = 1, dismissed = 0 WHERE user_id = ?").bind(p.id).run();
   return c.json({ ok: true, name: p.name, user_id: p.id });
 });
 
 app.put("/api/people/:id", async (c) => {
   const id = Number(c.req.param("id"));
-  const b = await c.req.json<{ tag?: string | null; circle?: boolean; dismissed?: boolean; sub_manual?: string | null; note?: string; next_step?: string; next_date?: number | null }>();
+  const b = await c.req.json<{ tag?: string | null; circle?: boolean; dismissed?: boolean; sub_manual?: string | null; note?: string; next_step?: string; next_date?: number | null; kind?: string }>();
   if (b.tag && !TAGS.includes(b.tag)) return c.json({ error: "Etichetta non valida" }, 400);
   if (b.sub_manual && !["paid", "free", "none"].includes(b.sub_manual)) return c.json({ error: "Stato non valido" }, 400);
   const set: string[] = [];
   const val: unknown[] = [];
   const put = (col: string, v: unknown) => { set.push(`${col} = ?`); val.push(v); };
   if (b.tag !== undefined) put("tag", b.tag || null);
+  if (b.kind === "creator" || b.kind === "iscritto") put("kind", b.kind);
   if (b.circle !== undefined) put("circle", b.circle ? 1 : 0);
   if (b.dismissed !== undefined) put("dismissed", b.dismissed ? 1 : 0);
   if (b.sub_manual !== undefined) put("sub_manual", b.sub_manual || null);
@@ -657,6 +710,40 @@ app.put("/api/people/:id", async (c) => {
   if (b.next_step !== undefined) put("next_step", String(b.next_step).slice(0, 300));
   if (b.next_date !== undefined) put("next_date", b.next_date || null);
   if (set.length) await c.env.DB.prepare(`UPDATE people SET ${set.join(", ")} WHERE user_id = ?`).bind(...val, id).run();
+  return c.json({ ok: true });
+});
+
+/** Starts or stops the daily read of a creator's public notes, posts and profile (at most 10 at a time). */
+app.post("/api/people/:id/watch", async (c) => {
+  const id = Number(c.req.param("id"));
+  const { on } = await c.req.json<{ on: boolean }>();
+  const p = await c.env.DB.prepare("SELECT handle, name, photo_url FROM people WHERE user_id = ?").bind(id).first<{ handle: string | null; name: string | null; photo_url: string | null }>();
+  if (!p) return c.json({ error: "Persona non trovata" }, 404);
+  if (!on) {
+    await c.env.DB.batch([c.env.DB.prepare("DELETE FROM follows WHERE user_id = ?").bind(id), c.env.DB.prepare("DELETE FROM feed_items WHERE handle = ?").bind(p.handle ?? "")]);
+    return c.json({ ok: true });
+  }
+  if (!p.handle) return c.json({ error: "Profilo non ancora identificato: riprova dopo la prossima lettura" }, 400);
+  const count = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM follows").first<{ n: number }>();
+  if ((count?.n ?? 0) >= 10) return c.json({ error: "Massimo 10 profili osservati" }, 400);
+  await c.env.DB.batch([
+    c.env.DB.prepare("INSERT OR REPLACE INTO follows (handle, user_id, name, photo_url, added_at) VALUES (?,?,?,?,?)").bind(p.handle, id, p.name, p.photo_url, Date.now()),
+    c.env.DB.prepare("UPDATE people SET kind = 'creator' WHERE user_id = ?").bind(id),
+  ]);
+  return c.json({ ok: true });
+});
+
+app.post("/api/people/:id/topics", async (c) => {
+  const key = await claudeKey(c.env);
+  const id = Number(c.req.param("id"));
+  const p = await c.env.DB.prepare("SELECT name, handle, posts FROM people WHERE user_id = ?").bind(id).first<{ name: string | null; handle: string | null; posts: string | null }>();
+  if (!p) return c.json({ error: "Persona non trovata" }, 404);
+  const notes = (await c.env.DB.prepare("SELECT body FROM feed_items WHERE handle = ? ORDER BY date DESC LIMIT 40").bind(p.handle ?? "").all<{ body: string }>()).results.map((r) => r.body);
+  const posts = (p.posts ? JSON.parse(p.posts) : []).map((x: any) => x.title);
+  if (notes.length + posts.length < 5) return c.json({ error: "Ancora troppo poco materiale: riprova dopo qualche giorno di osservazione" }, 400);
+  const s = await getSettings(c.env);
+  const topics = await analyzeCreator(key, UI_LANGS[s.language]?.name ?? "Italian", { name: p.name ?? p.handle ?? "", notes, posts });
+  await c.env.DB.prepare("UPDATE people SET topics = ? WHERE user_id = ?").bind(JSON.stringify({ at: Date.now(), items: topics }), id).run();
   return c.json({ ok: true });
 });
 
@@ -713,6 +800,13 @@ app.get("/api/sources", async (c) => {
       children: (x.children ?? []).map((ch: any) => ({ name: ch.sourceName ?? ch.source, metrics: (ch.metrics ?? []).map(slim) })),
     })),
   });
+});
+
+app.post("/api/radar/sync", async (c) => {
+  const s = await getSettings(c.env);
+  const wait = 60 * 60_000 - (Date.now() - Number(s.last_radar_sync || 0));
+  if (wait > 0) return c.json({ error: `I creator sono stati letti da poco: riprova tra ${Math.ceil(wait / 60_000)} minuti` }, 429);
+  return c.json(await radarSync(c.env));
 });
 
 // ---------- trend ----------

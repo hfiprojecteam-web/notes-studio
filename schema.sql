@@ -94,7 +94,10 @@ CREATE TABLE IF NOT EXISTS people (
   sub_manual TEXT,                       -- paid | free | none, set by hand when the public profile does not tell
   note TEXT,
   next_step TEXT,
-  next_date INTEGER
+  next_date INTEGER,
+  kind TEXT,                             -- iscritto | creator (which side of People)
+  posts TEXT,                            -- JSON: recent posts of a watched creator
+  topics TEXT                            -- JSON: Claude's reading of what a creator writes about
 );
 
 -- What I wrote to someone (by hand, outside the app) and how it went
@@ -125,4 +128,12 @@ CREATE TABLE IF NOT EXISTS materials (
   body TEXT NOT NULL,
   source TEXT,
   created_at INTEGER NOT NULL
+);
+
+-- Follower count of each watched creator, one row per day
+CREATE TABLE IF NOT EXISTS creator_snapshots (
+  user_id INTEGER NOT NULL,
+  day TEXT NOT NULL,
+  followers INTEGER,
+  PRIMARY KEY (user_id, day)
 );

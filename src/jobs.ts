@@ -115,26 +115,7 @@ export async function sync(env: Env, opts: { deep?: boolean; others?: boolean } 
     }
   }
 
-  // 3. Latest notes of the creators I follow
-  const follows = others
-    ? await env.DB.prepare("SELECT handle, user_id FROM follows ORDER BY added_at LIMIT 10").all<{ handle: string; user_id: number }>()
-    : { results: [] as { handle: string; user_id: number }[] };
   const errors: string[] = [];
-  for (const f of follows.results) {
-    await nap(800, 2600);
-    try {
-      for (const n of await substack.getUserNotes(f.user_id, 1, sid)) {
-        stmts.push(
-          env.DB.prepare(
-            `INSERT INTO feed_items (substack_id, handle, body, date, likes, restacks, replies) VALUES (?,?,?,?,?,?,?)
-             ON CONFLICT(substack_id) DO UPDATE SET likes=excluded.likes, restacks=excluded.restacks, replies=excluded.replies`,
-          ).bind(n.id, f.handle, n.body, n.date, n.likes, n.restacks, n.replies),
-        );
-      }
-    } catch (e) {
-      errors.push(`${f.handle}: ${e instanceof Error ? e.message : e}`);
-    }
-  }
   stmts.push(env.DB.prepare("DELETE FROM feed_items WHERE date < ?").bind(now - 30 * 86400_000));
 
   // 4. Daily snapshot of my own numbers, so trends can be drawn later
@@ -192,7 +173,7 @@ export async function sync(env: Env, opts: { deep?: boolean; others?: boolean } 
   await setSetting(env, "last_sync", String(now));
   if (others) await setSetting(env, "last_others_sync", String(now));
   await setSetting(env, "last_sync_error", errors.join("; "));
-  return { myNotes: mine.length, others, checkedForReplies: recent.length, follows: follows.results.length, errors };
+  return { myNotes: mine.length, others, checkedForReplies: recent.length, errors };
 }
 
 /** Records whether the saved session cookie still works. Only a sign-in refusal counts as broken. */
@@ -236,6 +217,17 @@ export async function tick(env: Env) {
   if (!s.user_id) return;
   const now = Date.now();
   const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a));
+  // Watched creators have their own daily slot, so one invocation never does both batches of reads.
+  if (!s.next_radar_sync || now >= Number(s.next_radar_sync)) {
+    const t = localParts(now + 86400_000, s.timezone);
+    await setSetting(env, "next_radar_sync", String(zonedToUtc(t.y, t.m, t.d, rand(7, 22), rand(0, 60), s.timezone)));
+    try {
+      await radarSync(env);
+    } catch (e) {
+      await setSetting(env, "last_sync_error", e instanceof Error ? e.message : String(e));
+    }
+    return;
+  }
   const dueOthers = !s.next_others_sync || now >= Number(s.next_others_sync);
   const dueOwn = !s.next_own_sync || now >= Number(s.next_own_sync);
   if (!dueOthers && !dueOwn) return;
@@ -251,4 +243,47 @@ export async function tick(env: Env) {
   } catch (e) {
     await setSetting(env, "last_sync_error", e instanceof Error ? e.message : String(e));
   }
+}
+
+/**
+ * Reads the watched creators (at most 10): their latest notes, their recent posts and their public profile.
+ * Runs once a day at its own random time, separate from the other reads so each run stays small.
+ */
+export async function radarSync(env: Env) {
+  const s = await getSettings(env);
+  const sid = (await getSid(env, s)) ?? undefined;
+  const now = Date.now();
+  const lp = localParts(now, s.timezone);
+  const day = `${lp.y}-${String(lp.m).padStart(2, "0")}-${String(lp.d).padStart(2, "0")}`;
+  const follows = await env.DB.prepare("SELECT handle, user_id FROM follows ORDER BY added_at LIMIT 10").all<{ handle: string; user_id: number }>();
+  const stmts: D1PreparedStatement[] = [];
+  const errors: string[] = [];
+  for (const f of follows.results) {
+    try {
+      await nap(900, 2800);
+      for (const n of await substack.getUserNotes(f.user_id, 1, sid)) {
+        stmts.push(
+          env.DB.prepare(
+            `INSERT INTO feed_items (substack_id, handle, body, date, likes, restacks, replies) VALUES (?,?,?,?,?,?,?)
+             ON CONFLICT(substack_id) DO UPDATE SET likes=excluded.likes, restacks=excluded.restacks, replies=excluded.replies`,
+          ).bind(n.id, f.handle, n.body, n.date, n.likes, n.restacks, n.replies),
+        );
+      }
+      await nap(900, 2800);
+      const posts = await substack.getUserPosts(f.user_id, 12, sid);
+      await nap(900, 2800);
+      const profile = await substack.getFullProfile(f.handle, sid);
+      stmts.push(personUpdate(env, profile, now));
+      stmts.push(env.DB.prepare("UPDATE people SET kind = COALESCE(kind, 'creator'), posts = ? WHERE user_id = ?").bind(JSON.stringify(posts), f.user_id));
+      if (profile.followers != null) {
+        stmts.push(env.DB.prepare("INSERT INTO creator_snapshots (user_id, day, followers) VALUES (?,?,?) ON CONFLICT(user_id, day) DO UPDATE SET followers = excluded.followers").bind(f.user_id, day, profile.followers));
+      }
+    } catch (e) {
+      errors.push(`${f.handle}: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+  for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
+  await setSetting(env, "last_radar_sync", String(now));
+  if (errors.length) await setSetting(env, "last_sync_error", errors.join("; "));
+  return { creators: follows.results.length, errors };
 }

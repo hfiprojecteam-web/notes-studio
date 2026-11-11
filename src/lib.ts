@@ -82,6 +82,8 @@ export interface Settings {
   last_others_sync: string;
   last_manual_sync: string;
   pub_subdomain: string;
+  next_radar_sync: string;
+  last_radar_sync: string;
   language: string; // interface and writing language: it, en, de, es, ru, fr, hi, pt
 }
 
@@ -104,6 +106,8 @@ const DEFAULTS: Settings = {
   last_others_sync: "",
   last_manual_sync: "",
   pub_subdomain: "",
+  next_radar_sync: "",
+  last_radar_sync: "",
   language: "it",
 };
 

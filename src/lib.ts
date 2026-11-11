@@ -68,6 +68,7 @@ export interface Settings {
   user_id: string;
   timezone: string;
   slots: string; // JSON array of "HH:MM"
+  slot_days: string; // JSON array of weekdays the slots apply to: 1 = Monday ... 7 = Sunday
   voice_prompt: string;
   voice_profile: string; // JSON, see VoiceProfile
   sid_enc: string;
@@ -94,6 +95,7 @@ const DEFAULTS: Settings = {
   user_id: "",
   timezone: "Europe/Rome",
   slots: '["09:00","13:00","18:30"]',
+  slot_days: "[1,2,3,4,5,6,7]",
   voice_prompt: "",
   voice_profile: "",
   sid_enc: "",
@@ -168,10 +170,14 @@ export function zonedToUtc(y: number, m: number, d: number, h: number, min: numb
 }
 
 /** The next `count` free slot times after `from`, skipping the ones in `taken`. */
-export function nextSlots(count: number, slots: string[], tz: string, taken: Set<number>, from = Date.now()) {
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+/** 1 = Monday ... 7 = Sunday, for an instant seen in `tz`. */
+export const weekdayOf = (ms: number, tz: string) => WEEKDAYS.indexOf(localParts(ms, tz).weekday) + 1;
+
+export function nextSlots(count: number, slots: string[], tz: string, taken: Set<number>, from = Date.now(), days: number[] = [1, 2, 3, 4, 5, 6, 7]) {
   const sorted = [...slots].sort();
   const out: number[] = [];
-  if (!sorted.length) return out;
+  if (!sorted.length || !days.length) return out;
   const start = localParts(from, tz);
   for (let day = 0; out.length < count && day < 400; day++) {
     // Walk calendar days via UTC noon so month/year rollovers are handled by Date.
@@ -179,7 +185,7 @@ export function nextSlots(count: number, slots: string[], tz: string, taken: Set
     for (const s of sorted) {
       const [h, min] = s.split(":").map(Number);
       const t = zonedToUtc(base.getUTCFullYear(), base.getUTCMonth() + 1, base.getUTCDate(), h, min, tz);
-      if (t > from + 60_000 && !taken.has(t)) {
+      if (t > from + 60_000 && !taken.has(t) && days.includes(weekdayOf(t, tz))) {
         out.push(t);
         if (out.length === count) break;
       }

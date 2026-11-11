@@ -496,5 +496,16 @@
  "Indirizzo non valido: deve iniziare con https://": "Invalid address: it must start with https://",
  "Avviso di prova inviato": "Test alert sent",
  "L'indirizzo non ha accettato il messaggio: l'avviso compare solo nell'app": "The address did not accept the message: the alert shows only in the app",
- "Nessun indirizzo per le notifiche: l'avviso compare solo nell'app": "No notification address: the alert shows only in the app"
+ "Nessun indirizzo per le notifiche: l'avviso compare solo nell'app": "No notification address: the alert shows only in the app",
+ "Scegli data e ora": "Pick date and time",
+ "Altro orario": "Another time",
+ "Orari ricorrenti": "Recurring times",
+ "Aggiungi orario": "Add time",
+ "Sono scorciatoie per riempire la settimana in un clic. Puoi sempre scegliere un altro orario per una singola Note, o pubblicarla subito.": "They are shortcuts for filling the week in one click. You can always pick another time for a single Note, or publish it straight away.",
+ "Giorni in cui valgono": "Days they apply to",
+ "Orario aggiunto: premi Salva per confermare": "Time added: press Save to confirm",
+ "Nessun orario ricorrente impostato: puoi comunque scegliere un orario qualsiasi, o definire i tuoi nelle Impostazioni.": "No recurring times set: you can still pick any time, or define your own in Settings.",
+ "Qualsiasi giorno e ora, anche fuori dagli orari ricorrenti. Nell'orario di questo dispositivo. Lascia vuoto per tenerla tra le bozze.": "Any day and time, including outside your recurring times. In this device's time. Leave empty to keep it as a draft.",
+ "Nessuno slot orario disponibile: controlla orari e giorni nelle Impostazioni": "No slot available: check times and days in Settings",
+ "Togli": "Remove"
 }

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
-import { Env, encrypt, getSettings, getSid, localParts, zonedToUtc, makeSession, nextSlots, passwordMatches, sessionValid, setSetting, madeOwn, sameText, sha256 } from "./lib";
+import { Env, encrypt, getSettings, getSid, localParts, weekdayOf, zonedToUtc, makeSession, nextSlots, passwordMatches, sessionValid, setSetting, madeOwn, sameText, sha256 } from "./lib";
 import { handleMcp } from "./mcp";
 import { checkCookie, personUpdate, publishOne, radarSync, raiseAlert, sync, tick } from "./jobs";
 import { EMPTY_PROFILE, Voice, VoiceProfile, analyzeVoice, composeVoice, analyzeCreator, generateNotes, generateOutlines, isMessageKind, personalMessage, isRewriteMode, remixInspiration, rewriteNote, suggestReply } from "./generate";
@@ -81,6 +81,7 @@ app.get("/api/settings", async (c) => {
     handle: s.handle,
     timezone: s.timezone,
     slots: JSON.parse(s.slots),
+    slot_days: JSON.parse(s.slot_days),
     has_voice: !!composeVoice(readProfile(s)),
     has_cookie: !!s.sid_enc,
     has_claude_key: !!c.env.ANTHROPIC_API_KEY,
@@ -99,7 +100,7 @@ app.get("/api/settings", async (c) => {
 });
 
 app.put("/api/settings", async (c) => {
-  const b = await c.req.json<{ handle?: string; timezone?: string; slots?: string[]; cookie?: string; paused?: boolean; ai_drafts?: boolean; language?: string; alert_url?: string }>();
+  const b = await c.req.json<{ handle?: string; timezone?: string; slots?: string[]; slot_days?: number[]; cookie?: string; paused?: boolean; ai_drafts?: boolean; language?: string; alert_url?: string }>();
   if (b.handle !== undefined) {
     const handle = b.handle.trim().replace(/^@/, "");
     if (handle) {
@@ -119,6 +120,9 @@ app.put("/api/settings", async (c) => {
   if (b.slots) {
     const slots = [...new Set(b.slots.map((s) => s.trim()).filter((s) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s)))].sort();
     await setSetting(c.env, "slots", JSON.stringify(slots));
+  }
+  if (Array.isArray(b.slot_days)) {
+    await setSetting(c.env, "slot_days", JSON.stringify([...new Set(b.slot_days.map(Number).filter((d) => d >= 1 && d <= 7))].sort()));
   }
   if (b.language && b.language in UI_LANGS) await setSetting(c.env, "language", b.language);
   if (b.alert_url !== undefined) {
@@ -210,7 +214,8 @@ app.post("/api/notes", async (c) => {
       ),
     ),
   );
-  return c.json({ ok: true, created: bodies.length });
+  const ids = (await c.env.DB.prepare("SELECT id FROM notes WHERE created_at = ? ORDER BY id DESC LIMIT ?").bind(now, bodies.length).all<{ id: number }>()).results.map((r) => r.id).reverse();
+  return c.json({ ok: true, created: bodies.length, ids });
 });
 
 const NEEDS_REWRITE = "È uno spunto di Claude: approvalo o riscrivilo prima di programmarlo";
@@ -280,8 +285,8 @@ app.post("/api/notes/schedule", async (c) => {
   const taken = new Set(
     (await c.env.DB.prepare("SELECT scheduled_at FROM notes WHERE status = 'scheduled'").all<{ scheduled_at: number }>()).results.map((r) => r.scheduled_at),
   );
-  const times = nextSlots(drafts.length, JSON.parse(s.slots), s.timezone, taken);
-  if (times.length < drafts.length) return c.json({ error: "Nessuno slot orario configurato nelle Impostazioni" }, 400);
+  const times = nextSlots(drafts.length, JSON.parse(s.slots), s.timezone, taken, Date.now(), JSON.parse(s.slot_days));
+  if (times.length < drafts.length) return c.json({ error: "Nessuno slot orario disponibile: controlla orari e giorni nelle Impostazioni" }, 400);
   if (drafts.length) {
     await c.env.DB.batch(
       drafts.map((id, i) => c.env.DB.prepare("UPDATE notes SET status = 'scheduled', scheduled_at = ? WHERE id = ?").bind(times[i], id)),
@@ -445,6 +450,7 @@ app.get("/api/week", async (c) => {
   const s = await getSettings(c.env);
   const offset = Math.max(-52, Math.min(52, Number(c.req.query("offset")) || 0));
   const slots: string[] = JSON.parse(s.slots);
+  const activeDays: number[] = JSON.parse(s.slot_days);
   const today = localParts(Date.now(), s.timezone);
   const days = [];
   for (let i = 0; i < 7; i++) {
@@ -455,13 +461,13 @@ app.get("/api/week", async (c) => {
       key: `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
       start: zonedToUtc(y, m, day, 0, 0, s.timezone),
       end: zonedToUtc(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), 0, 0, s.timezone),
-      slots: slots.map((label) => {
+      slots: (activeDays.includes(weekdayOf(zonedToUtc(y, m, day, 12, 0, s.timezone), s.timezone)) ? slots : []).map((label) => {
         const [h, min] = label.split(":").map(Number);
         return { label, ts: zonedToUtc(y, m, day, h, min, s.timezone) };
       }),
     });
   }
-  return c.json({ timezone: s.timezone, offset, now: Date.now(), days });
+  return c.json({ timezone: s.timezone, offset, now: Date.now(), has_slots: slots.length > 0 && activeDays.length > 0, days });
 });
 
 // ---------- stats ----------

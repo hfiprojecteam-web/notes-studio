@@ -451,7 +451,7 @@ views.studio = async (v) => {
       .map((n) => `<div class="slot full" draggable="true" data-id="${n.id}"><div class="t mono">${icon("clock")}${hm(n.scheduled_at)}</div><div class="x">${esc(n.body)}</div></div>`);
     return `<div class="day ${weekOffset === 0 && i === 0 ? "today" : ""}">
       <div class="dname">${F(d.start, { weekday: "short" })}<b class="mono">${F(d.start, { day: "numeric" })}</b></div>
-      <div class="slots">${cells.join("")}${extra.join("")}</div></div>`;
+      <div class="slots">${cells.join("")}${extra.join("")}${d.end > week.now ? `<button class="slot free" data-day="${d.start}" style="min-height:0;display:flex;align-items:center;gap:6px">${icon("plus")}<span>Altro orario</span></button>` : ""}</div></div>`;
   };
   const draftHtml = (n, i) => `<div class="draft" ${n.reviewed ? 'draggable="true"' : ""} data-id="${n.id}" style="--i:${i}">
       <span class="grip" title="${n.reviewed ? "Trascina su uno slot" : "Da approvare prima di programmare"}" ${n.reviewed ? "" : 'style="cursor:default;color:var(--accent)"'}>${icon(n.reviewed ? "grip" : "spark")}</span>
@@ -466,7 +466,8 @@ views.studio = async (v) => {
         <div class="panel pad composer">
           <textarea id="newBody" placeholder="A cosa stai pensando? Per importarne più d'una, separale con una riga che contiene solo ---"></textarea>
           <div class="bar"><span class="meta mono" id="count">0</span><span class="grow"></span>
-            <button class="ghost" id="addDraft">Salva bozza</button><button class="btn" id="addQueue">${icon("clock")}Prossimo slot</button></div>
+            <button class="quiet" id="addDraft">Salva bozza</button><button class="ghost" id="addNow">${icon("send")}Pubblica ora</button>
+            <button class="ghost" id="addWhen">${icon("studio")}Scegli data e ora</button><button class="btn" id="addQueue">${icon("clock")}Prossimo slot</button></div>
         </div>
         ${stuck.length ? `<div class="sec"><h2>Da controllare</h2><span class="n mono">${stuck.length}</span></div><div>${stuck.map(draftHtml).join("")}</div>` : ""}
         <div class="sec"><h2>Bozze</h2><span class="n mono">${drafts.length}</span><span class="grow"></span>${drafts.length ? `<button class="quiet" id="schedAll">${icon("clock")}Programma tutte</button>` : ""}</div>
@@ -479,7 +480,8 @@ views.studio = async (v) => {
           <button class="quiet" id="wPrev" title="Settimana precedente" ${weekOffset <= 0 ? "disabled" : ""}>${icon("left")}</button>
           <button class="quiet" id="wNow" ${weekOffset === 0 ? "disabled" : ""}>Oggi</button>
           <button class="quiet" id="wNext" title="Settimana successiva">${icon("right")}</button></div>
-        ${week.days[0].slots.length ? week.days.map(dayHtml).join("") : `<div class="pad">${empty("Nessuno slot orario", "Aggiungi gli orari di pubblicazione nelle Impostazioni.")}</div>`}
+        ${week.days.map(dayHtml).join("")}
+        ${week.has_slots ? "" : `<div class="pad meta">Nessun orario ricorrente impostato: puoi comunque scegliere un orario qualsiasi, o definire i tuoi nelle Impostazioni.</div>`}
       </section>
     </div>`;
 
@@ -492,11 +494,24 @@ views.studio = async (v) => {
     toast(bodies.length === 1 ? (queue ? "Note in coda" : "Bozza salvata") : (queue ? `${bodies.length} Notes in coda` : `${bodies.length} Notes salvate`)); render();
   });
   $("#addDraft").onclick = add(false); $("#addQueue").onclick = add(true);
+  $("#addWhen").onclick = () => { if (!nb.value.trim()) return toast("Scrivi qualcosa prima"); openEditor({ body: nb.value.trim(), scheduled_at: null, pick: true }); };
+  $("#addNow").onclick = (e) => act(e.currentTarget, async () => {
+    const text = nb.value.trim(); if (!text) throw new Error("Scrivi qualcosa prima");
+    if (!confirm("Pubblicare subito su Substack?")) return;
+    const r = await api("/notes", "POST", { body: text });
+    try { await api(`/notes/${r.ids[0]}/publish`, "POST"); toast("Pubblicata su Substack"); } finally { render(); }
+  });
   if ($("#schedAll")) $("#schedAll").onclick = (e) => act(e.currentTarget, async () => { const r = await api("/notes/schedule", "POST", {}); toast(`${r.scheduled} Notes programmate`); render(); });
   $("#wPrev").onclick = () => { weekOffset--; render(); }; $("#wNext").onclick = () => { weekOffset++; render(); }; $("#wNow").onclick = () => { weekOffset = 0; render(); };
 
   v.onclick = (e) => {
-    const free = e.target.closest(".slot.free"); if (free) return openEditor({ scheduled_at: +free.dataset.ts, body: "" });
+    const free = e.target.closest(".slot.free");
+    if (free) {
+      if (free.dataset.ts) return openEditor({ scheduled_at: +free.dataset.ts, body: "" });
+      // "Another time" on a day: propose the next full hour today, or noon on a later day.
+      const start = +free.dataset.day, t = start < week.now ? Math.ceil((week.now + 10 * 60000) / 3600000) * 3600000 : start + 12 * 3600000;
+      return openEditor({ scheduled_at: t, body: "", pick: true });
+    }
     const el = e.target.closest("[data-id]"); if (el) openEditor(notes.find((n) => n.id == el.dataset.id));
   };
   // Drag a note onto a free slot to schedule it, or back onto the drafts to unschedule it.
@@ -526,7 +541,7 @@ function openEditor(n) {
       <button type="button" class="ghost" data-mode="hooks">${icon("wand")}3 aperture</button>` : ""}</div>
     <div id="eVariants" style="display:grid;gap:8px"></div>
     <div class="field" style="margin:0"><label for="eWhen">Data e ora di pubblicazione</label>
-      <input type="datetime-local" id="eWhen" value="${n.scheduled_at ? toLocalInput(n.scheduled_at) : ""}"><span class="help">Nell'orario di questo dispositivo. Lascia vuoto per tenerla tra le bozze.</span></div>
+      <input type="datetime-local" id="eWhen" value="${n.scheduled_at ? toLocalInput(n.scheduled_at) : ""}"><span class="help">Qualsiasi giorno e ora, anche fuori dagli orari ricorrenti. Nell'orario di questo dispositivo. Lascia vuoto per tenerla tra le bozze.</span></div>
     <div class="row">
       ${n.id && !n.reviewed ? `<button type="button" class="ghost" id="eApprove">${icon("check")}Approva così com'è</button>` : ""}
       ${isNew ? "" : `<button type="button" class="quiet danger" id="eDel">${icon("trash")}Elimina</button><button type="button" class="quiet" id="eNow">${icon("send")}Pubblica ora</button>`}
@@ -568,6 +583,7 @@ function openEditor(n) {
     });
   }
   d.showModal();
+  if (n.pick) { const w = $("#eWhen", d); if (!w.value) w.value = toLocalInput(Math.ceil((Date.now() + 10 * 60000) / 3600000) * 3600000); w.focus(); }
 }
 
 // ---------- Genera ----------
@@ -1023,7 +1039,12 @@ views.settings = async (v) => {
         <div class="field"><label for="sHandle">Il tuo handle Substack</label><input id="sHandle" value="${esc(s.handle)}" placeholder="nomeutente"><span class="help">Quello che compare in substack.com/@nomeutente, senza la chiocciola.</span></div>
         <div class="field"><label for="sCookie">Cookie di sessione Substack</label><input id="sCookie" type="password" autocomplete="off" placeholder="${s.has_cookie ? "Già salvato. Compila solo per sostituirlo" : "Incolla il valore di substack.sid"}">
           <span class="help">Su substack.com da loggato: F12, Application, Cookies, riga substack.sid. Viene salvato cifrato e non è più mostrato. Chi lo possiede può agire come te.</span></div>
-        <div class="field"><label for="sSlots">Slot di pubblicazione giornalieri</label><input id="sSlots" class="mono" value="${esc(s.slots.join(", "))}"><span class="help">Orari nel formato HH:MM, separati da virgola.</span></div>
+        <div class="field"><label>Orari ricorrenti</label>
+          <div class="chips" id="sSlotChips">${s.slots.map((t) => `<button type="button" class="chip on mono" data-slot="${t}" title="Togli">${t} ×</button>`).join("")}</div>
+          <div class="row"><input type="time" id="sSlotNew" class="auto mono"><button type="button" class="ghost" id="sSlotAdd">${icon("plus")}Aggiungi orario</button></div>
+          <span class="help">Sono scorciatoie per riempire la settimana in un clic. Puoi sempre scegliere un altro orario per una singola Note, o pubblicarla subito.</span></div>
+        <div class="field"><label>Giorni in cui valgono</label>
+          <div class="chips" id="sDays">${["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"].map((n, k) => `<button type="button" class="chip ${s.slot_days.includes(k + 1) ? "on" : ""}" data-d="${k + 1}">${n}</button>`).join("")}</div></div>
         <div class="field"><label for="sTz">Fuso orario</label><select id="sTz" data-nt>${zones.map((z) => `<option ${z === s.timezone ? "selected" : ""}>${z}</option>`).join("")}</select><span class="help">Gli slot e le statistiche usano questo fuso.</span></div>
         <button class="btn" id="sSave">${icon("check")}Salva</button>
       </section>
@@ -1050,13 +1071,16 @@ views.settings = async (v) => {
       </section>
     </div>`;
   $("#sSave").onclick = (e) => act(e.currentTarget, async () => {
-    await api("/settings", "PUT", { alert_url: $("#sAlert").value, language: $("#sLang").value, handle: $("#sHandle").value, cookie: $("#sCookie").value || undefined, timezone: $("#sTz").value, slots: $("#sSlots").value.split(",") });
+    await api("/settings", "PUT", { alert_url: $("#sAlert").value, language: $("#sLang").value, handle: $("#sHandle").value, cookie: $("#sCookie").value || undefined, timezone: $("#sTz").value, slots: $$("#sSlotChips [data-slot]").map((c) => c.dataset.slot), slot_days: $$("#sDays .chip.on").map((c) => +c.dataset.d) });
     const fresh = await api("/settings"); if (fresh.language !== LANG) { await setLang(fresh.language); settings = fresh; drawNav(); drawStatus(); }
     toast("Impostazioni salvate"); render();
   });
   for (const [id, key, msg] of [["#sPaused", "paused", ["Pausa attivata", "Pausa tolta"]], ["#sAi", "ai_drafts", ["Aiuto di Claude attivato", "Aiuto di Claude disattivato"]]]) {
     $(id).onchange = (e) => act(null, async () => { await api("/settings", "PUT", { [key]: e.target.checked }); settings = await api("/settings"); drawNav(); drawStatus(); toast(msg[e.target.checked ? 0 : 1]); });
   }
+  $("#sSlotChips").onclick = (e) => { const c = e.target.closest("[data-slot]"); if (c) c.parentNode.removeChild(c); };
+  $("#sDays").onclick = (e) => { const c = e.target.closest(".chip"); if (c) c.classList.toggle("on"); };
+  $("#sSlotAdd").onclick = () => { const t = $("#sSlotNew").value; if (!t) return; if (!$(`#sSlotChips [data-slot="${t}"]`)) $("#sSlotChips").insertAdjacentHTML("beforeend", `<button type="button" class="chip on mono" data-slot="${t}" title="Togli">${t} ×</button>`); $("#sSlotNew").value = ""; toast("Orario aggiunto: premi Salva per confermare"); };
   $("#sAlertTest").onclick = (e) => act(e.currentTarget, async () => {
     await api("/settings", "PUT", { alert_url: $("#sAlert").value });
     const r = await api("/alerts/test", "POST"); drawAlerts();

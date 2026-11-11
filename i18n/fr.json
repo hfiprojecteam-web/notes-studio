@@ -496,5 +496,16 @@
  "Indirizzo non valido: deve iniziare con https://": "Adresse invalide : elle doit commencer par https://",
  "Avviso di prova inviato": "Alerte de test envoyée",
  "L'indirizzo non ha accettato il messaggio: l'avviso compare solo nell'app": "L'adresse n'a pas accepté le message : l'alerte s'affiche uniquement dans l'app",
- "Nessun indirizzo per le notifiche: l'avviso compare solo nell'app": "Aucune adresse de notification : l'alerte s'affiche uniquement dans l'app"
+ "Nessun indirizzo per le notifiche: l'avviso compare solo nell'app": "Aucune adresse de notification : l'alerte s'affiche uniquement dans l'app",
+ "Scegli data e ora": "Choisir la date et l'heure",
+ "Altro orario": "Autre horaire",
+ "Orari ricorrenti": "Horaires récurrents",
+ "Aggiungi orario": "Ajouter un horaire",
+ "Sono scorciatoie per riempire la settimana in un clic. Puoi sempre scegliere un altro orario per una singola Note, o pubblicarla subito.": "Ce sont des raccourcis pour remplir la semaine en un clic. Tu peux toujours choisir un autre horaire pour une Note précise, ou la publier tout de suite.",
+ "Giorni in cui valgono": "Jours concernés",
+ "Orario aggiunto: premi Salva per confermare": "Horaire ajouté : appuie sur Enregistrer pour confirmer",
+ "Nessun orario ricorrente impostato: puoi comunque scegliere un orario qualsiasi, o definire i tuoi nelle Impostazioni.": "Aucun horaire récurrent défini : tu peux quand même choisir n'importe quel horaire, ou définir les tiens dans les Paramètres.",
+ "Qualsiasi giorno e ora, anche fuori dagli orari ricorrenti. Nell'orario di questo dispositivo. Lascia vuoto per tenerla tra le bozze.": "N'importe quel jour et heure, même en dehors de tes horaires récurrents. À l'heure de cet appareil. Laisse vide pour la garder en brouillon.",
+ "Nessuno slot orario disponibile: controlla orari e giorni nelle Impostazioni": "Aucun créneau disponible : vérifie les horaires et les jours dans les Paramètres",
+ "Togli": "Retirer"
 }

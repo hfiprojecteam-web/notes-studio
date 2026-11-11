@@ -496,5 +496,16 @@
  "Indirizzo non valido: deve iniziare con https://": "एड्रेस सही नहीं है: यह https:// से शुरू होना चाहिए",
  "Avviso di prova inviato": "टेस्ट अलर्ट भेज दिया गया",
  "L'indirizzo non ha accettato il messaggio: l'avviso compare solo nell'app": "एड्रेस ने संदेश स्वीकार नहीं किया: अलर्ट सिर्फ़ ऐप में दिखेगा",
- "Nessun indirizzo per le notifiche: l'avviso compare solo nell'app": "नोटिफ़िकेशन का कोई एड्रेस नहीं है: अलर्ट सिर्फ़ ऐप में दिखेगा"
+ "Nessun indirizzo per le notifiche: l'avviso compare solo nell'app": "नोटिफ़िकेशन का कोई एड्रेस नहीं है: अलर्ट सिर्फ़ ऐप में दिखेगा",
+ "Scegli data e ora": "तारीख़ और समय चुनें",
+ "Altro orario": "कोई और समय",
+ "Orari ricorrenti": "नियमित समय",
+ "Aggiungi orario": "समय जोड़ें",
+ "Sono scorciatoie per riempire la settimana in un clic. Puoi sempre scegliere un altro orario per una singola Note, o pubblicarla subito.": "ये एक क्लिक में पूरा हफ़्ता भरने के शॉर्टकट हैं। आप किसी एक Note के लिए हमेशा अलग समय चुन सकते हैं या उसे तुरंत पब्लिश कर सकते हैं।",
+ "Giorni in cui valgono": "किन दिनों पर लागू हों",
+ "Orario aggiunto: premi Salva per confermare": "समय जोड़ दिया गया: पक्का करने के लिए सेव करें दबाएँ",
+ "Nessun orario ricorrente impostato: puoi comunque scegliere un orario qualsiasi, o definire i tuoi nelle Impostazioni.": "कोई नियमित समय तय नहीं है: आप फिर भी कोई भी समय चुन सकते हैं, या सेटिंग्स में अपने समय तय कर सकते हैं।",
+ "Qualsiasi giorno e ora, anche fuori dagli orari ricorrenti. Nell'orario di questo dispositivo. Lascia vuoto per tenerla tra le bozze.": "कोई भी दिन और समय, नियमित समय के बाहर भी। इस डिवाइस के समय के अनुसार। ड्राफ़्ट में रखने के लिए खाली छोड़ें।",
+ "Nessuno slot orario disponibile: controlla orari e giorni nelle Impostazioni": "कोई स्लॉट उपलब्ध नहीं है: सेटिंग्स में समय और दिन जाँचें",
+ "Togli": "हटाएँ"
 }

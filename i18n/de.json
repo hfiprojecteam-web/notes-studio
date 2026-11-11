@@ -481,5 +481,20 @@
  "· #k caratteri": "· #k Zeichen",
  "È iscritto alla tua pubblicazione": "Hat deine Publikation abonniert",
  "È tuo abbonato a pagamento": "Ist dein zahlender Abonnent",
- "È uno spunto di Claude: approvalo o riscrivilo prima di programmarlo": "Das ist eine Idee von Claude: Gib sie frei oder schreib sie um, bevor du sie planst"
+ "È uno spunto di Claude: approvalo o riscrivilo prima di programmarlo": "Das ist eine Idee von Claude: Gib sie frei oder schreib sie um, bevor du sie planst",
+ "Una Note non è stata pubblicata": "Eine Note wurde nicht veröffentlicht",
+ "Il collegamento a Substack si è interrotto": "Die Verbindung zu Substack ist unterbrochen",
+ "Reinserisci il cookie nelle Impostazioni: fino ad allora le Notes in coda non usciranno.": "Trag das Cookie in den Einstellungen neu ein: Bis dahin gehen geplante Notes nicht raus.",
+ "Una Note è bloccata in pubblicazione": "Eine Note hängt beim Veröffentlichen",
+ "Prossimo passo in scadenza": "Ein nächster Schritt ist fällig",
+ "Avviso di prova": "Testhinweis",
+ "Ho visto": "Gesehen",
+ "Avvisi": "Hinweise",
+ "Invia un avviso di prova": "Testhinweis senden",
+ "Indirizzo per le notifiche": "Adresse für Benachrichtigungen",
+ "Facoltativo. Un indirizzo web a cui l'app invia un messaggio quando una Note non esce o il collegamento si interrompe: per esempio un canale ntfy.sh o un webhook di Make. Gli avvisi compaiono comunque in cima all'app.": "Optional. Eine Webadresse, an die die App eine Nachricht schickt, wenn eine Note nicht rausgeht oder die Verbindung abbricht: zum Beispiel ein ntfy.sh-Kanal oder ein Make-Webhook. Hinweise erscheinen in jedem Fall auch oben in der App.",
+ "Indirizzo non valido: deve iniziare con https://": "Ungültige Adresse: Sie muss mit https:// beginnen",
+ "Avviso di prova inviato": "Testhinweis gesendet",
+ "L'indirizzo non ha accettato il messaggio: l'avviso compare solo nell'app": "Die Adresse hat die Nachricht nicht angenommen: Der Hinweis erscheint nur in der App",
+ "Nessun indirizzo per le notifiche: l'avviso compare solo nell'app": "Keine Adresse für Benachrichtigungen: Der Hinweis erscheint nur in der App"
 }

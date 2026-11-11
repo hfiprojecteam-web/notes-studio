@@ -481,5 +481,20 @@
  "· #k caratteri": "· #k символов",
  "È iscritto alla tua pubblicazione": "Подписан на твоё издание",
  "È tuo abbonato a pagamento": "Он твой платный подписчик",
- "È uno spunto di Claude: approvalo o riscrivilo prima di programmarlo": "Это идея от Claude: одобри её или перепиши, прежде чем запланировать"
+ "È uno spunto di Claude: approvalo o riscrivilo prima di programmarlo": "Это идея от Claude: одобри её или перепиши, прежде чем запланировать",
+ "Una Note non è stata pubblicata": "Note не опубликована",
+ "Il collegamento a Substack si è interrotto": "Подключение к Substack прервалось",
+ "Reinserisci il cookie nelle Impostazioni: fino ad allora le Notes in coda non usciranno.": "Введи cookie заново в Настройках: до этого Notes из очереди выходить не будут.",
+ "Una Note è bloccata in pubblicazione": "Note зависла при публикации",
+ "Prossimo passo in scadenza": "Пора сделать следующий шаг",
+ "Avviso di prova": "Тестовое уведомление",
+ "Ho visto": "Понятно",
+ "Avvisi": "Уведомления",
+ "Invia un avviso di prova": "Отправить тестовое уведомление",
+ "Indirizzo per le notifiche": "Адрес для уведомлений",
+ "Facoltativo. Un indirizzo web a cui l'app invia un messaggio quando una Note non esce o il collegamento si interrompe: per esempio un canale ntfy.sh o un webhook di Make. Gli avvisi compaiono comunque in cima all'app.": "Необязательно. Веб-адрес, на который приложение отправит сообщение, если Note не вышла или подключение прервалось: например, канал ntfy.sh или вебхук Make. В любом случае уведомления показываются и вверху приложения.",
+ "Indirizzo non valido: deve iniziare con https://": "Неверный адрес: он должен начинаться с https://",
+ "Avviso di prova inviato": "Тестовое уведомление отправлено",
+ "L'indirizzo non ha accettato il messaggio: l'avviso compare solo nell'app": "Адрес не принял сообщение: уведомление показано только в приложении",
+ "Nessun indirizzo per le notifiche: l'avviso compare solo nell'app": "Адрес для уведомлений не задан: уведомление показано только в приложении"
 }

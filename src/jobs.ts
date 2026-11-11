@@ -1,5 +1,6 @@
 import { Env, getSettings, getSid, localParts, setSetting, zonedToUtc } from "./lib";
 import * as substack from "./substack";
+import { trServer } from "./i18n";
 
 /** Publishes one queued note. Marks it `publishing` first so two runs can never post it twice. */
 export async function publishOne(env: Env, id: number): Promise<{ ok: boolean; error?: string }> {
@@ -21,6 +22,7 @@ export async function publishOne(env: Env, id: number): Promise<{ ok: boolean; e
     // No automatic retry: if Substack accepted the note but the response was lost, a retry would double-post.
     const error = e instanceof Error ? e.message : String(e);
     await env.DB.prepare("UPDATE notes SET status = 'failed', error = ? WHERE id = ?").bind(error, id).run();
+    await raiseAlert(env, "publish", "Una Note non è stata pubblicata", `${error}: ${note!.body.slice(0, 120)}`);
     return { ok: false, error };
   }
 }
@@ -171,6 +173,14 @@ export async function sync(env: Env, opts: { deep?: boolean; others?: boolean } 
 
   for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
   await setSetting(env, "last_sync", String(now));
+  if (others) {
+    const due = await env.DB.prepare("SELECT user_id, name, handle, next_step, next_date FROM people WHERE circle = 1 AND next_date IS NOT NULL AND next_date <= ? LIMIT 10")
+      .bind(now + 12 * 3600_000)
+      .all<{ user_id: number; name: string | null; handle: string | null; next_step: string | null; next_date: number }>();
+    for (const p of due.results) {
+      await raiseAlert(env, "step", "Prossimo passo in scadenza", `${p.name ?? p.handle ?? ""}: ${p.next_step || ""}`, `step:${p.user_id}:${p.next_date}`);
+    }
+  }
   if (others) await setSetting(env, "last_others_sync", String(now));
   await setSetting(env, "last_sync_error", errors.join("; "));
   return { myNotes: mine.length, others, checkedForReplies: recent.length, errors };
@@ -189,6 +199,9 @@ export async function checkCookie(env: Env): Promise<boolean | null> {
       // A network hiccup or a rate limit says nothing about the cookie: leave the state unknown.
       ok = e instanceof substack.SubstackError && (e.status === 401 || e.status === 403) ? false : null;
     }
+  }
+  if (ok === false && s.cookie_ok !== "0") {
+    await raiseAlert(env, "cookie", "Il collegamento a Substack si è interrotto", "Reinserisci il cookie nelle Impostazioni: fino ad allora le Notes in coda non usciranno.");
   }
   if (ok !== null || !sid) await setSetting(env, "cookie_ok", ok === null ? "" : ok ? "1" : "0");
   await setSetting(env, "cookie_checked_at", String(Date.now()));
@@ -214,6 +227,10 @@ export async function tick(env: Env) {
   const s = await getSettings(env);
   if (s.paused === "1") return;
   await publishDue(env);
+  const stuck = await env.DB.prepare("SELECT id, body FROM notes WHERE status = 'publishing' AND scheduled_at < ? LIMIT 5").bind(Date.now() - 15 * 60_000).all<{ id: number; body: string }>();
+  for (const n of stuck.results) {
+    await raiseAlert(env, "stuck", "Una Note è bloccata in pubblicazione", `Controlla su Substack se è uscita prima di ripubblicarla: ${n.body.slice(0, 120)}`, `stuck:${n.id}`);
+  }
   if (!s.user_id) return;
   const now = Date.now();
   const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a));
@@ -286,4 +303,29 @@ export async function radarSync(env: Env) {
   await setSetting(env, "last_radar_sync", String(now));
   if (errors.length) await setSetting(env, "last_sync_error", errors.join("; "));
   return { creators: follows.results.length, errors };
+}
+
+/**
+ * Records a problem the writer must know about and, when an address is configured, pushes it there too.
+ * `ref` makes an alert unique: the same ref is never raised twice. Returns whether the push went out.
+ */
+export async function raiseAlert(env: Env, kind: string, title: string, detail: string, ref?: string): Promise<boolean> {
+  const r = await env.DB.prepare("INSERT INTO alerts (at, kind, title, detail, ref) VALUES (?,?,?,?,?) ON CONFLICT(ref) DO NOTHING")
+    .bind(Date.now(), kind, title, detail.slice(0, 500), ref ?? null)
+    .run();
+  if (!r.meta.changes) return false;
+  const s = await getSettings(env);
+  if (!s.alert_url) return false;
+  try {
+    // Plain text with a Title header: understood by ntfy-style services and readable by any webhook.
+    const res = await fetch(s.alert_url, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain; charset=utf-8", Title: "Notes Studio", Tags: "warning" },
+      body: `${trServer(s.language, title)}\n${detail.slice(0, 300)}`,
+      signal: AbortSignal.timeout(6000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }

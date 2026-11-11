@@ -2,31 +2,12 @@ import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { Env, encrypt, getSettings, getSid, localParts, zonedToUtc, makeSession, nextSlots, passwordMatches, sessionValid, setSetting, madeOwn, sameText, sha256 } from "./lib";
 import { handleMcp } from "./mcp";
-import { checkCookie, personUpdate, publishOne, radarSync, sync, tick } from "./jobs";
+import { checkCookie, personUpdate, publishOne, radarSync, raiseAlert, sync, tick } from "./jobs";
 import { EMPTY_PROFILE, Voice, VoiceProfile, analyzeVoice, composeVoice, analyzeCreator, generateNotes, generateOutlines, isMessageKind, personalMessage, isRewriteMode, remixInspiration, rewriteNote, suggestReply } from "./generate";
 import * as substack from "./substack";
 import page from "../public/index.html";
 
-import it from "../i18n/it.json";
-import en from "../i18n/en.json";
-import de from "../i18n/de.json";
-import es from "../i18n/es.json";
-import ru from "../i18n/ru.json";
-import fr from "../i18n/fr.json";
-import hi from "../i18n/hi.json";
-import pt from "../i18n/pt.json";
-
-/** Interface languages. Italian is the source text; the others are dictionaries keyed by the Italian string. */
-const UI_LANGS: Record<string, { name: string; dict: Record<string, string> | null }> = {
-  it: { name: "Italian", dict: it },
-  en: { name: "English", dict: en },
-  de: { name: "German", dict: de },
-  es: { name: "Spanish", dict: es },
-  ru: { name: "Russian", dict: ru },
-  fr: { name: "French", dict: fr },
-  hi: { name: "Hindi", dict: hi },
-  pt: { name: "Brazilian Portuguese", dict: pt },
-};
+import { UI_LANGS } from "./i18n";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -109,6 +90,7 @@ app.get("/api/settings", async (c) => {
     cookie_checked_at: s.cookie_checked_at ? Number(s.cookie_checked_at) : null,
     language: s.language,
     has_connector: !!s.connector_hash,
+    alert_url: s.alert_url,
     paused: s.paused === "1",
     ai_drafts: s.ai_drafts !== "0",
     next_others_sync: s.next_others_sync ? Number(s.next_others_sync) : null,
@@ -117,7 +99,7 @@ app.get("/api/settings", async (c) => {
 });
 
 app.put("/api/settings", async (c) => {
-  const b = await c.req.json<{ handle?: string; timezone?: string; slots?: string[]; cookie?: string; paused?: boolean; ai_drafts?: boolean; language?: string }>();
+  const b = await c.req.json<{ handle?: string; timezone?: string; slots?: string[]; cookie?: string; paused?: boolean; ai_drafts?: boolean; language?: string; alert_url?: string }>();
   if (b.handle !== undefined) {
     const handle = b.handle.trim().replace(/^@/, "");
     if (handle) {
@@ -139,6 +121,11 @@ app.put("/api/settings", async (c) => {
     await setSetting(c.env, "slots", JSON.stringify(slots));
   }
   if (b.language && b.language in UI_LANGS) await setSetting(c.env, "language", b.language);
+  if (b.alert_url !== undefined) {
+    const u = b.alert_url.trim();
+    if (u && !/^https:\/\/[^\s]+$/.test(u) && !/^http:\/\/(localhost|127\.0\.0\.1)[:/]/.test(u)) return c.json({ error: "Indirizzo non valido: deve iniziare con https://" }, 400);
+    await setSetting(c.env, "alert_url", u);
+  }
   if (b.paused !== undefined) await setSetting(c.env, "paused", b.paused ? "1" : "");
   if (b.ai_drafts !== undefined) await setSetting(c.env, "ai_drafts", b.ai_drafts ? "1" : "0");
   if (b.cookie) {
@@ -646,6 +633,24 @@ app.post("/api/materials", async (c) => {
 app.delete("/api/materials/:id", async (c) => {
   await c.env.DB.prepare("DELETE FROM materials WHERE id = ?").bind(Number(c.req.param("id"))).run();
   return c.json({ ok: true });
+});
+
+// ---------- alerts ----------
+
+app.get("/api/alerts", async (c) => {
+  return c.json((await c.env.DB.prepare("SELECT id, at, kind, title, detail FROM alerts WHERE seen = 0 ORDER BY at DESC LIMIT 20").all()).results);
+});
+
+app.post("/api/alerts/seen", async (c) => {
+  const b = await c.req.json<{ id?: number }>().catch(() => ({}) as { id?: number });
+  if (b.id) await c.env.DB.prepare("UPDATE alerts SET seen = 1 WHERE id = ?").bind(b.id).run();
+  else await c.env.DB.prepare("UPDATE alerts SET seen = 1 WHERE seen = 0").run();
+  return c.json({ ok: true });
+});
+
+app.post("/api/alerts/test", async (c) => {
+  const pushed = await raiseAlert(c.env, "test", "Avviso di prova", new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC");
+  return c.json({ ok: true, pushed });
 });
 
 // ---------- people ----------

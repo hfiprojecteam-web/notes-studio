@@ -481,5 +481,20 @@
  "· #k caratteri": "· #k characters",
  "È iscritto alla tua pubblicazione": "Subscribed to your publication",
  "È tuo abbonato a pagamento": "Is your paid subscriber",
- "È uno spunto di Claude: approvalo o riscrivilo prima di programmarlo": "This is an idea from Claude: approve it or rewrite it before scheduling it"
+ "È uno spunto di Claude: approvalo o riscrivilo prima di programmarlo": "This is an idea from Claude: approve it or rewrite it before scheduling it",
+ "Una Note non è stata pubblicata": "A Note was not published",
+ "Il collegamento a Substack si è interrotto": "The connection to Substack has dropped",
+ "Reinserisci il cookie nelle Impostazioni: fino ad allora le Notes in coda non usciranno.": "Enter the cookie again in Settings: until then, queued Notes will not go out.",
+ "Una Note è bloccata in pubblicazione": "A Note is stuck while publishing",
+ "Prossimo passo in scadenza": "A next step is due",
+ "Avviso di prova": "Test alert",
+ "Ho visto": "Got it",
+ "Avvisi": "Alerts",
+ "Invia un avviso di prova": "Send a test alert",
+ "Indirizzo per le notifiche": "Notification address",
+ "Facoltativo. Un indirizzo web a cui l'app invia un messaggio quando una Note non esce o il collegamento si interrompe: per esempio un canale ntfy.sh o un webhook di Make. Gli avvisi compaiono comunque in cima all'app.": "Optional. A web address the app messages when a Note fails to go out or the connection drops: for example an ntfy.sh channel or a Make webhook. Alerts always show at the top of the app as well.",
+ "Indirizzo non valido: deve iniziare con https://": "Invalid address: it must start with https://",
+ "Avviso di prova inviato": "Test alert sent",
+ "L'indirizzo non ha accettato il messaggio: l'avviso compare solo nell'app": "The address did not accept the message: the alert shows only in the app",
+ "Nessun indirizzo per le notifiche: l'avviso compare solo nell'app": "No notification address: the alert shows only in the app"
 }

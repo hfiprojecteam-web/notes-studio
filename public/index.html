@@ -51,6 +51,12 @@
   @keyframes breathe { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); } 50% { box-shadow: 0 0 0 5px transparent; } }
   main { padding: 34px clamp(18px, 4vw, 52px) 90px; max-width: 1400px; width: 100%; }
 
+  .col { min-width: 0; }
+  #alerts { padding: 0 clamp(18px, 4vw, 52px); max-width: 1400px; }
+  .alert { display: flex; gap: 12px; align-items: flex-start; margin-top: 16px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--bad) 35%, var(--line)); background: var(--bad-soft); border-radius: 12px; animation: rise .4s var(--ease) both; }
+  .alert b { font-weight: 600; display: block; } .alert .meta { overflow-wrap: anywhere; }
+  .alert svg { color: var(--bad); margin-top: 2px; }
+  @media (max-width: 820px) { #alerts { padding: 0 16px; } }
   /* type */
   h1 { font-size: 26px; font-weight: 600; letter-spacing: -.03em; line-height: 1.15; margin: 0; }
   h2 { font-size: 13px; font-weight: 500; color: var(--muted); margin: 0; letter-spacing: .01em; }
@@ -286,7 +292,7 @@
       <button class="quiet" id="logout"><svg class="i"><use href="#i-out"/></svg>Esci</button>
     </div>
   </aside>
-  <main id="view"></main>
+  <div class="col"><div id="alerts"></div><main id="view"></main></div>
 </div>
 
 <dialog id="editor"></dialog>
@@ -407,10 +413,19 @@ $("#loginForm").onsubmit = async (e) => {
 };
 $("#logout").onclick = async () => { await api("/logout", "POST"); showLogin(); };
 
+// Problems raised by the server stay on top of every screen until acknowledged.
+async function drawAlerts() {
+  let list = []; try { list = await api("/alerts"); } catch { return; }
+  $("#alerts").innerHTML = list.map((a) => `<div class="alert" data-id="${a.id}">${icon("x")}<div class="grow"><b>${esc(a.title)}</b><div class="meta" ${a.kind === "cookie" ? "" : "data-nt"}>${esc(a.detail || "")}</div><div class="meta">${F(a.at)}</div></div><button class="ghost" data-seen>Ho visto</button></div>`).join("");
+}
+$("#alerts").onclick = (e) => { const b = e.target.closest("[data-seen]"); if (b) act(b, async () => { await api("/alerts/seen", "POST", { id: +b.closest(".alert").dataset.id }); drawAlerts(); }); };
+setInterval(() => { if (!$("#app").classList.contains("hidden") && !document.hidden) drawAlerts(); }, 120000);
+
 const views = {};
 async function render() {
   const v = $("#view"); v.onclick = v.onkeydown = v.onchange = v.oninput = null; document.onkeydown = null;
   v.innerHTML = `<div class="skel" style="height:34px;width:220px;margin-bottom:26px"></div>${skel(4)}`;
+  drawAlerts();
   try { await views[tab](v); } catch (e) { if (e.message !== "Sessione scaduta") v.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
 }
 
@@ -1022,6 +1037,9 @@ views.settings = async (v) => {
         <div class="item meta" style="border:0">Contenuti di altri (risposte, creator seguiti, profili): letti una volta al giorno, a un orario casuale tra le 7 e le 22, con pause tra una richiesta e l'altra.
           ${s.last_others_sync ? ` Ultima lettura ${F(s.last_others_sync)}.` : ""}${s.next_others_sync ? ` Prossima ${F(s.next_others_sync)}.` : ""}
           Le Notes programmate escono fino a 6 minuti dopo lo slot, mai al minuto esatto.</div>
+        <div class="sec"><h2 class="grow">Avvisi</h2><button class="ghost" id="sAlertTest">Invia un avviso di prova</button></div>
+        <div class="field" style="margin-bottom:6px"><label for="sAlert">Indirizzo per le notifiche</label><input id="sAlert" class="mono" data-nt value="${esc(s.alert_url || "")}" placeholder="https://">
+          <span class="help">Facoltativo. Un indirizzo web a cui l'app invia un messaggio quando una Note non esce o il collegamento si interrompe: per esempio un canale ntfy.sh o un webhook di Make. Gli avvisi compaiono comunque in cima all'app.</span></div>
         <div class="sec"><h2 class="grow">Connettore per Claude</h2><button class="ghost" id="sConn">${s.has_connector ? "Sostituisci indirizzo" : "Crea indirizzo"}</button></div>
         <p class="meta">Collega Notes Studio a Claude come connettore personalizzato: in chat potrà leggere bozze, risultati, voce, materiali e persone, e salvare bozze che approvi tu qui. Non può programmare, pubblicare né contattare nessuno.</p>${s.has_connector ? '<p class="meta"><span class="tag ok">Un indirizzo è già attivo.</span></p>' : ""}
         <div id="conn"></div>
@@ -1032,13 +1050,18 @@ views.settings = async (v) => {
       </section>
     </div>`;
   $("#sSave").onclick = (e) => act(e.currentTarget, async () => {
-    await api("/settings", "PUT", { language: $("#sLang").value, handle: $("#sHandle").value, cookie: $("#sCookie").value || undefined, timezone: $("#sTz").value, slots: $("#sSlots").value.split(",") });
+    await api("/settings", "PUT", { alert_url: $("#sAlert").value, language: $("#sLang").value, handle: $("#sHandle").value, cookie: $("#sCookie").value || undefined, timezone: $("#sTz").value, slots: $("#sSlots").value.split(",") });
     const fresh = await api("/settings"); if (fresh.language !== LANG) { await setLang(fresh.language); settings = fresh; drawNav(); drawStatus(); }
     toast("Impostazioni salvate"); render();
   });
   for (const [id, key, msg] of [["#sPaused", "paused", ["Pausa attivata", "Pausa tolta"]], ["#sAi", "ai_drafts", ["Aiuto di Claude attivato", "Aiuto di Claude disattivato"]]]) {
     $(id).onchange = (e) => act(null, async () => { await api("/settings", "PUT", { [key]: e.target.checked }); settings = await api("/settings"); drawNav(); drawStatus(); toast(msg[e.target.checked ? 0 : 1]); });
   }
+  $("#sAlertTest").onclick = (e) => act(e.currentTarget, async () => {
+    await api("/settings", "PUT", { alert_url: $("#sAlert").value });
+    const r = await api("/alerts/test", "POST"); drawAlerts();
+    toast(r.pushed ? "Avviso di prova inviato" : $("#sAlert").value.trim() ? "L'indirizzo non ha accettato il messaggio: l'avviso compare solo nell'app" : "Nessun indirizzo per le notifiche: l'avviso compare solo nell'app");
+  });
   $("#sConn").onclick = (e) => act(e.currentTarget, async () => {
     if (s.has_connector && !confirm("L'indirizzo attuale smetterà di funzionare. Continuare?")) return;
     const r = await api("/connector", "POST");

@@ -481,5 +481,20 @@
  "· #k caratteri": "· #k caracteres",
  "È iscritto alla tua pubblicazione": "É assinante da sua publicação",
  "È tuo abbonato a pagamento": "É seu assinante pago",
- "È uno spunto di Claude: approvalo o riscrivilo prima di programmarlo": "É uma ideia do Claude: aprove ou reescreva antes de agendar"
+ "È uno spunto di Claude: approvalo o riscrivilo prima di programmarlo": "É uma ideia do Claude: aprove ou reescreva antes de agendar",
+ "Una Note non è stata pubblicata": "Uma Note não foi publicada",
+ "Il collegamento a Substack si è interrotto": "A conexão com o Substack caiu",
+ "Reinserisci il cookie nelle Impostazioni: fino ad allora le Notes in coda non usciranno.": "Informe o cookie de novo nas Configurações: até lá, as Notes da fila não vão sair.",
+ "Una Note è bloccata in pubblicazione": "Uma Note travou durante a publicação",
+ "Prossimo passo in scadenza": "Um próximo passo está vencendo",
+ "Avviso di prova": "Alerta de teste",
+ "Ho visto": "Entendi",
+ "Avvisi": "Alertas",
+ "Invia un avviso di prova": "Enviar um alerta de teste",
+ "Indirizzo per le notifiche": "Endereço para notificações",
+ "Facoltativo. Un indirizzo web a cui l'app invia un messaggio quando una Note non esce o il collegamento si interrompe: per esempio un canale ntfy.sh o un webhook di Make. Gli avvisi compaiono comunque in cima all'app.": "Opcional. Um endereço web para onde o app envia uma mensagem quando uma Note não sai ou a conexão cai: por exemplo um canal do ntfy.sh ou um webhook do Make. Os alertas aparecem de qualquer forma no topo do app.",
+ "Indirizzo non valido: deve iniziare con https://": "Endereço inválido: precisa começar com https://",
+ "Avviso di prova inviato": "Alerta de teste enviado",
+ "L'indirizzo non ha accettato il messaggio: l'avviso compare solo nell'app": "O endereço não aceitou a mensagem: o alerta aparece só no app",
+ "Nessun indirizzo per le notifiche: l'avviso compare solo nell'app": "Sem endereço para notificações: o alerta aparece só no app"
 }

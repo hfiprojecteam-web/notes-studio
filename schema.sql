@@ -137,3 +137,14 @@ CREATE TABLE IF NOT EXISTS creator_snapshots (
   followers INTEGER,
   PRIMARY KEY (user_id, day)
 );
+
+-- Problems the writer must know about (failed publication, broken connection, due follow-ups)
+CREATE TABLE IF NOT EXISTS alerts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  title TEXT NOT NULL,
+  detail TEXT,
+  ref TEXT UNIQUE,
+  seen INTEGER NOT NULL DEFAULT 0
+);

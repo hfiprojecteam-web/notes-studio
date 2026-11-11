@@ -570,5 +570,8 @@
  "Hai orari liberi nelle prossime 48 ore: scrivi una Note o programma una bozza.": "अगले 48 घंटों में खाली समय है: एक Note लिखें या कोई ड्राफ़्ट शेड्यूल करें।",
  "Scrivi una Note e scegli quando farla uscire.": "एक Note लिखें और चुनें कि वह कब पब्लिश हो।",
  "Per iniziare": "शुरुआत के लिए",
- "La tua ultima Note": "आपका पिछला Note"
+ "La tua ultima Note": "आपका पिछला Note",
+ "Tentativi di accesso falliti": "साइन-इन की नाकाम कोशिशें",
+ "Cinque password errate di fila: l'accesso è rimasto chiuso per 15 minuti.": "लगातार पाँच गलत पासवर्ड: साइन-इन 15 मिनट के लिए बंद रहा।",
+ "Troppi tentativi: riprova tra # minuti": "बहुत ज़्यादा कोशिशें: # मिनट बाद दोबारा आज़माएँ"
 }

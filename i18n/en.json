@@ -570,5 +570,8 @@
  "Hai orari liberi nelle prossime 48 ore: scrivi una Note o programma una bozza.": "You have free times in the next 48 hours: write a Note or schedule a draft.",
  "Scrivi una Note e scegli quando farla uscire.": "Write a Note and choose when it goes out.",
  "Per iniziare": "Getting started",
- "La tua ultima Note": "Your latest Note"
+ "La tua ultima Note": "Your latest Note",
+ "Tentativi di accesso falliti": "Failed sign-in attempts",
+ "Cinque password errate di fila: l'accesso è rimasto chiuso per 15 minuti.": "Five wrong passwords in a row: sign-in stayed closed for 15 minutes.",
+ "Troppi tentativi: riprova tra # minuti": "Too many attempts: try again in # minute ||| Too many attempts: try again in # minutes"
 }

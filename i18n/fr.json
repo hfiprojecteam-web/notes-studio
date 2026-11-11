@@ -570,5 +570,8 @@
  "Hai orari liberi nelle prossime 48 ore: scrivi una Note o programma una bozza.": "Tu as des horaires libres dans les prochaines 48 heures : écris une Note ou programme un brouillon.",
  "Scrivi una Note e scegli quando farla uscire.": "Écris une Note et choisis quand elle part.",
  "Per iniziare": "Pour commencer",
- "La tua ultima Note": "Ta dernière Note"
+ "La tua ultima Note": "Ta dernière Note",
+ "Tentativi di accesso falliti": "Tentatives de connexion échouées",
+ "Cinque password errate di fila: l'accesso è rimasto chiuso per 15 minuti.": "Cinq mots de passe erronés d'affilée : la connexion est restée fermée pendant 15 minutes.",
+ "Troppi tentativi: riprova tra # minuti": "Trop de tentatives : réessaie dans # minute ||| Trop de tentatives : réessaie dans # minutes"
 }

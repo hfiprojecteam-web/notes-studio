@@ -570,5 +570,8 @@
  "Hai orari liberi nelle prossime 48 ore: scrivi una Note o programma una bozza.": "В ближайшие 48 часов есть свободное время: напиши Note или запланируй черновик.",
  "Scrivi una Note e scegli quando farla uscire.": "Напиши Note и выбери, когда она выйдет.",
  "Per iniziare": "С чего начать",
- "La tua ultima Note": "Твоя последняя Note"
+ "La tua ultima Note": "Твоя последняя Note",
+ "Tentativi di accesso falliti": "Неудачные попытки входа",
+ "Cinque password errate di fila: l'accesso è rimasto chiuso per 15 minuti.": "Пять неверных паролей подряд: вход был закрыт на 15 минут.",
+ "Troppi tentativi: riprova tra # minuti": "Слишком много попыток: попробуй через # минуту ||| Слишком много попыток: попробуй через # минуты ||| Слишком много попыток: попробуй через # минут ||| Слишком много попыток: попробуй через # минуты"
 }

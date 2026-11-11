@@ -69,7 +69,23 @@ app.all("/mcp/:token", async (c) => {
 app.post("/api/login", async (c) => {
   const { password } = await c.req.json<{ password: string }>();
   if (!c.env.APP_PASSWORD || !c.env.SECRET_KEY) return c.json({ error: "APP_PASSWORD e SECRET_KEY non configurati" }, 500);
-  if (!(await passwordMatches(c.env, password ?? ""))) return c.json({ error: "Password errata" }, 401);
+  // One owner, one password: after 5 wrong attempts the login closes for everyone for 15 minutes.
+  // The count is global on purpose, because an attacker can change address at will.
+  const s = await getSettings(c.env);
+  const now = Date.now();
+  if (Number(s.login_lock_until || 0) > now) {
+    return c.json({ error: `Troppi tentativi: riprova tra ${Math.ceil((Number(s.login_lock_until) - now) / 60_000)} minuti` }, 429);
+  }
+  if (!(await passwordMatches(c.env, password ?? ""))) {
+    const fails = Number(s.login_fails || 0) + 1;
+    if (fails >= 5) {
+      await setSetting(c.env, "login_fails", "0");
+      await setSetting(c.env, "login_lock_until", String(now + 15 * 60_000));
+      await raiseAlert(c.env, "login", "Tentativi di accesso falliti", "Cinque password errate di fila: l'accesso è rimasto chiuso per 15 minuti.", `login:${Math.floor(now / 900_000)}`);
+    } else await setSetting(c.env, "login_fails", String(fails));
+    return c.json({ error: "Password errata" }, 401);
+  }
+  if (s.login_fails && s.login_fails !== "0") await setSetting(c.env, "login_fails", "0");
   setCookie(c, "session", await makeSession(c.env), { httpOnly: true, secure: true, sameSite: "Strict", path: "/", maxAge: 30 * 86400 });
   return c.json({ ok: true });
 });

@@ -443,12 +443,12 @@ views.studio = async (v) => {
     const used = new Set();
     const cells = d.slots.map((s) => {
       const n = slotOf.get(s.ts);
-      if (n) { used.add(n.id); return `<div class="slot full" draggable="true" data-id="${n.id}" data-ts="${s.ts}"><div class="t mono">${icon("clock")}${s.label}</div><div class="x">${esc(n.body)}</div></div>`; }
+      if (n) { used.add(n.id); return `<div class="slot full" draggable="true" data-id="${n.id}" data-ts="${s.ts}"><div class="t mono">${icon("clock")}${s.label}${n.native_id ? `<span class="tag ok" style="margin-left:auto;font-family:Geist,sans-serif">affidata a Substack</span>` : ""}</div><div class="x">${esc(n.body)}</div></div>`; }
       return `<button class="slot free ${s.ts < week.now ? "past" : ""}" data-ts="${s.ts}"><div class="t mono">${s.label}</div>Libero</button>`;
     });
     // Notes scheduled outside the configured slots still show on their day.
     const extra = sched.filter((n) => n.scheduled_at >= d.start && n.scheduled_at < d.end && !used.has(n.id))
-      .map((n) => `<div class="slot full" draggable="true" data-id="${n.id}"><div class="t mono">${icon("clock")}${hm(n.scheduled_at)}</div><div class="x">${esc(n.body)}</div></div>`);
+      .map((n) => `<div class="slot full" draggable="true" data-id="${n.id}"><div class="t mono">${icon("clock")}${hm(n.scheduled_at)}${n.native_id ? `<span class="tag ok" style="margin-left:auto;font-family:Geist,sans-serif">affidata a Substack</span>` : ""}</div><div class="x">${esc(n.body)}</div></div>`);
     return `<div class="day ${weekOffset === 0 && i === 0 ? "today" : ""}">
       <div class="dname">${F(d.start, { weekday: "short" })}<b class="mono">${F(d.start, { day: "numeric" })}</b></div>
       <div class="slots">${cells.join("")}${extra.join("")}${d.end > week.now ? `<button class="slot free" data-day="${d.start}" style="min-height:0;display:flex;align-items:center;gap:6px">${icon("plus")}<span>Altro orario</span></button>` : ""}</div></div>`;
@@ -1039,6 +1039,9 @@ views.settings = async (v) => {
         <div class="field"><label for="sHandle">Il tuo handle Substack</label><input id="sHandle" value="${esc(s.handle)}" placeholder="nomeutente"><span class="help">Quello che compare in substack.com/@nomeutente, senza la chiocciola.</span></div>
         <div class="field"><label for="sCookie">Cookie di sessione Substack</label><input id="sCookie" type="password" autocomplete="off" placeholder="${s.has_cookie ? "Già salvato. Compila solo per sostituirlo" : "Incolla il valore di substack.sid"}">
           <span class="help">Su substack.com da loggato: F12, Application, Cookies, riga substack.sid. Viene salvato cifrato e non è più mostrato. Chi lo possiede può agire come te.</span></div>
+        <div class="field"><label for="sMode">Chi pubblica le Notes programmate</label>
+          <select id="sMode"><option value="timer" ${s.publish_mode === "timer" ? "selected" : ""}>Notes Studio, con il suo timer</option><option value="native" ${s.publish_mode === "native" ? "selected" : ""}>Substack, con la sua programmazione</option></select>
+          <span class="help">Con Substack, la Note gli viene consegnata nel momento in cui la programmi e la ritrovi tra le sue bozze: esce anche se questa app o il cookie hanno un problema. Vale per le Notes programmate da ora in poi.</span></div>
         <div class="field"><label>Orari ricorrenti</label>
           <div class="chips" id="sSlotChips">${s.slots.map((t) => `<button type="button" class="chip on mono" data-slot="${t}" title="Togli">${t} ×</button>`).join("")}</div>
           <div class="row"><input type="time" id="sSlotNew" class="auto mono"><button type="button" class="ghost" id="sSlotAdd">${icon("plus")}Aggiungi orario</button></div>
@@ -1071,7 +1074,7 @@ views.settings = async (v) => {
       </section>
     </div>`;
   $("#sSave").onclick = (e) => act(e.currentTarget, async () => {
-    await api("/settings", "PUT", { alert_url: $("#sAlert").value, language: $("#sLang").value, handle: $("#sHandle").value, cookie: $("#sCookie").value || undefined, timezone: $("#sTz").value, slots: $$("#sSlotChips [data-slot]").map((c) => c.dataset.slot), slot_days: $$("#sDays .chip.on").map((c) => +c.dataset.d) });
+    await api("/settings", "PUT", { publish_mode: $("#sMode").value, alert_url: $("#sAlert").value, language: $("#sLang").value, handle: $("#sHandle").value, cookie: $("#sCookie").value || undefined, timezone: $("#sTz").value, slots: $$("#sSlotChips [data-slot]").map((c) => c.dataset.slot), slot_days: $$("#sDays .chip.on").map((c) => +c.dataset.d) });
     const fresh = await api("/settings"); if (fresh.language !== LANG) { await setLang(fresh.language); settings = fresh; drawNav(); drawStatus(); }
     toast("Impostazioni salvate"); render();
   });

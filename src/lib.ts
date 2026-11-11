@@ -83,6 +83,7 @@ export interface Settings {
   last_others_sync: string;
   last_manual_sync: string;
   pub_subdomain: string;
+  publish_mode: string; // "native" = Substack's own scheduler publishes; anything else = this app's timer
   alert_url: string; // optional address that receives a push message when something goes wrong
   connector_hash: string; // SHA-256 of the connector token; the token itself is never stored
   next_radar_sync: string;
@@ -110,6 +111,7 @@ const DEFAULTS: Settings = {
   last_others_sync: "",
   last_manual_sync: "",
   pub_subdomain: "",
+  publish_mode: "",
   alert_url: "",
   connector_hash: "",
   next_radar_sync: "",

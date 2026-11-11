@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { Env, encrypt, getSettings, getSid, localParts, weekdayOf, zonedToUtc, makeSession, nextSlots, passwordMatches, sessionValid, setSetting, madeOwn, sameText, sha256 } from "./lib";
 import { handleMcp } from "./mcp";
-import { checkCookie, personUpdate, publishOne, radarSync, raiseAlert, sync, tick } from "./jobs";
+import { checkCookie, personUpdate, publishOne, radarSync, raiseAlert, sync, syncNative, tick } from "./jobs";
 import { EMPTY_PROFILE, Voice, VoiceProfile, analyzeVoice, composeVoice, analyzeCreator, generateNotes, generateOutlines, isMessageKind, personalMessage, isRewriteMode, remixInspiration, rewriteNote, suggestReply } from "./generate";
 import * as substack from "./substack";
 import page from "../public/index.html";
@@ -91,6 +91,7 @@ app.get("/api/settings", async (c) => {
     cookie_checked_at: s.cookie_checked_at ? Number(s.cookie_checked_at) : null,
     language: s.language,
     has_connector: !!s.connector_hash,
+    publish_mode: s.publish_mode === "native" ? "native" : "timer",
     alert_url: s.alert_url,
     paused: s.paused === "1",
     ai_drafts: s.ai_drafts !== "0",
@@ -100,7 +101,7 @@ app.get("/api/settings", async (c) => {
 });
 
 app.put("/api/settings", async (c) => {
-  const b = await c.req.json<{ handle?: string; timezone?: string; slots?: string[]; slot_days?: number[]; cookie?: string; paused?: boolean; ai_drafts?: boolean; language?: string; alert_url?: string }>();
+  const b = await c.req.json<{ handle?: string; timezone?: string; slots?: string[]; slot_days?: number[]; cookie?: string; paused?: boolean; ai_drafts?: boolean; language?: string; alert_url?: string; publish_mode?: string }>();
   if (b.handle !== undefined) {
     const handle = b.handle.trim().replace(/^@/, "");
     if (handle) {
@@ -130,6 +131,7 @@ app.put("/api/settings", async (c) => {
     if (u && !/^https:\/\/[^\s]+$/.test(u) && !/^http:\/\/(localhost|127\.0\.0\.1)[:/]/.test(u)) return c.json({ error: "Indirizzo non valido: deve iniziare con https://" }, 400);
     await setSetting(c.env, "alert_url", u);
   }
+  if (b.publish_mode === "native" || b.publish_mode === "timer") await setSetting(c.env, "publish_mode", b.publish_mode);
   if (b.paused !== undefined) await setSetting(c.env, "paused", b.paused ? "1" : "");
   if (b.ai_drafts !== undefined) await setSetting(c.env, "ai_drafts", b.ai_drafts ? "1" : "0");
   if (b.cookie) {
@@ -215,6 +217,7 @@ app.post("/api/notes", async (c) => {
     ),
   );
   const ids = (await c.env.DB.prepare("SELECT id FROM notes WHERE created_at = ? ORDER BY id DESC LIMIT ?").bind(now, bodies.length).all<{ id: number }>()).results.map((r) => r.id).reverse();
+  if (b.scheduled_at) for (const id of ids) await syncNative(c.env, id);
   return c.json({ ok: true, created: bodies.length, ids });
 });
 
@@ -247,11 +250,16 @@ app.put("/api/notes/:id", async (c) => {
       .bind(b.scheduled_at, b.scheduled_at ? "scheduled" : "draft", id)
       .run();
   }
+  await syncNative(c.env, id);
   return c.json({ ok: true, reviewed });
 });
 
 app.delete("/api/notes/:id", async (c) => {
-  await c.env.DB.prepare("DELETE FROM notes WHERE id = ? AND status != 'publishing'").bind(Number(c.req.param("id"))).run();
+  const id = Number(c.req.param("id"));
+  // Withdraw it from Substack's scheduler first: a deleted note must not come out anyway.
+  await c.env.DB.prepare("UPDATE notes SET status = 'draft', scheduled_at = NULL WHERE id = ? AND status = 'scheduled'").bind(id).run();
+  await syncNative(c.env, id);
+  await c.env.DB.prepare("DELETE FROM notes WHERE id = ? AND status != 'publishing'").bind(id).run();
   return c.json({ ok: true });
 });
 
@@ -292,13 +300,29 @@ app.post("/api/notes/schedule", async (c) => {
       drafts.map((id, i) => c.env.DB.prepare("UPDATE notes SET status = 'scheduled', scheduled_at = ? WHERE id = ?").bind(times[i], id)),
     );
   }
+  let done = 0;
+  for (const id of drafts) {
+    try {
+      await syncNative(c.env, id);
+      done++;
+    } catch (e) {
+      // Substack refused (for example its limit of scheduled Notes): the rest stay as drafts.
+      const rest = drafts.slice(done + 1);
+      if (rest.length) await c.env.DB.prepare(`UPDATE notes SET status = 'draft', scheduled_at = NULL WHERE native_id IS NULL AND id IN (${rest.map(() => "?").join(",")})`).bind(...rest).run();
+      return c.json({ error: `${done} programmate, poi si è fermato. ${e instanceof Error ? e.message : e}` }, 502);
+    }
+  }
   return c.json({ ok: true, scheduled: drafts.length });
 });
 
 /** Sends every scheduled note back to drafts. */
 app.post("/api/notes/unschedule", async (c) => {
-  const r = await c.env.DB.prepare("UPDATE notes SET status = 'draft', scheduled_at = NULL WHERE status = 'scheduled'").run();
-  return c.json({ ok: true, unscheduled: r.meta.changes });
+  const ids = (await c.env.DB.prepare("SELECT id FROM notes WHERE status = 'scheduled'").all<{ id: number }>()).results.map((r) => r.id);
+  for (const id of ids) {
+    await c.env.DB.prepare("UPDATE notes SET status = 'draft', scheduled_at = NULL WHERE id = ?").bind(id).run();
+    await syncNative(c.env, id);
+  }
+  return c.json({ ok: true, unscheduled: ids.length });
 });
 
 app.post("/api/notes/:id/publish", async (c) => {

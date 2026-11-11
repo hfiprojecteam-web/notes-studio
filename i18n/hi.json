@@ -507,5 +507,11 @@
  "Nessun orario ricorrente impostato: puoi comunque scegliere un orario qualsiasi, o definire i tuoi nelle Impostazioni.": "कोई नियमित समय तय नहीं है: आप फिर भी कोई भी समय चुन सकते हैं, या सेटिंग्स में अपने समय तय कर सकते हैं।",
  "Qualsiasi giorno e ora, anche fuori dagli orari ricorrenti. Nell'orario di questo dispositivo. Lascia vuoto per tenerla tra le bozze.": "कोई भी दिन और समय, नियमित समय के बाहर भी। इस डिवाइस के समय के अनुसार। ड्राफ़्ट में रखने के लिए खाली छोड़ें।",
  "Nessuno slot orario disponibile: controlla orari e giorni nelle Impostazioni": "कोई स्लॉट उपलब्ध नहीं है: सेटिंग्स में समय और दिन जाँचें",
- "Togli": "हटाएँ"
+ "Togli": "हटाएँ",
+ "Chi pubblica le Notes programmate": "शेड्यूल किए गए Notes कौन पब्लिश करे",
+ "Notes Studio, con il suo timer": "Notes Studio, अपने टाइमर से",
+ "Substack, con la sua programmazione": "Substack, अपने शेड्यूलर से",
+ "Con Substack, la Note gli viene consegnata nel momento in cui la programmi e la ritrovi tra le sue bozze: esce anche se questa app o il cookie hanno un problema. Vale per le Notes programmate da ora in poi.": "Substack चुनने पर Note शेड्यूल करते ही उसे सौंप दिया जाता है और उसके ड्राफ़्ट्स में दिखता है: इस ऐप या कुकी में दिक्कत होने पर भी वह पब्लिश होगा। अब से शेड्यूल किए जाने वाले Notes पर लागू।",
+ "affidata a Substack": "Substack को सौंपा गया",
+ "Una Note programmata su Substack non risulta uscita": "Substack पर शेड्यूल किया गया एक Note पब्लिश हुआ नहीं दिख रहा"
 }

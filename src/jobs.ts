@@ -9,10 +9,15 @@ export async function publishOne(env: Env, id: number): Promise<{ ok: boolean; e
     .run();
   if (!claim.meta.changes) return { ok: false, error: "Note non trovata, già in pubblicazione, o spunto di Claude non ancora riscritto" };
 
-  const note = await env.DB.prepare("SELECT body FROM notes WHERE id = ?").bind(id).first<{ body: string }>();
+  const note = await env.DB.prepare("SELECT body, native_id FROM notes WHERE id = ?").bind(id).first<{ body: string; native_id: string | null }>();
   const sid = await getSid(env, await getSettings(env));
   try {
     if (!sid) throw new Error("Cookie Substack mancante: inseriscilo nelle Impostazioni");
+    if (note!.native_id) {
+      // Already handed to Substack's scheduler: withdraw it first, or it would come out twice.
+      await substack.deleteNative(sid, note!.native_id);
+      await env.DB.prepare("UPDATE notes SET native_id = NULL WHERE id = ?").bind(id).run();
+    }
     const substackId = await substack.publishNote(sid, note!.body);
     await env.DB.prepare("UPDATE notes SET status = 'published', published_at = ?, substack_id = ?, error = NULL WHERE id = ?")
       .bind(Date.now(), substackId, id)
@@ -30,7 +35,7 @@ export async function publishOne(env: Env, id: number): Promise<{ ok: boolean; e
 export async function publishDue(env: Env) {
   const { results } = await env.DB.prepare(
     // Each note goes out up to 6 minutes after its slot (a fixed offset per note), never on the exact minute.
-    "SELECT id FROM notes WHERE status = 'scheduled' AND scheduled_at + (id % 7) * 60000 <= ? ORDER BY scheduled_at LIMIT 2",
+    "SELECT id FROM notes WHERE status = 'scheduled' AND native_id IS NULL AND scheduled_at + (id % 7) * 60000 <= ? ORDER BY scheduled_at LIMIT 2",
   )
     .bind(Date.now())
     .all<{ id: number }>();
@@ -227,6 +232,7 @@ export async function tick(env: Env) {
   const s = await getSettings(env);
   if (s.paused === "1") return;
   await publishDue(env);
+  if (new Date().getUTCMinutes() % 3 === 0) await reconcileNative(env);
   const stuck = await env.DB.prepare("SELECT id, body FROM notes WHERE status = 'publishing' AND scheduled_at < ? LIMIT 5").bind(Date.now() - 15 * 60_000).all<{ id: number; body: string }>();
   for (const n of stuck.results) {
     await raiseAlert(env, "stuck", "Una Note è bloccata in pubblicazione", `Controlla su Substack se è uscita prima di ripubblicarla: ${n.body.slice(0, 120)}`, `stuck:${n.id}`);
@@ -327,5 +333,60 @@ export async function raiseAlert(env: Env, kind: string, title: string, detail: 
     return res.ok;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Makes Substack's scheduler match one note of the app: scheduled here and native mode on means a scheduled draft
+ * there; anything else means no draft there. If Substack refuses, the note goes back to drafts and the error is thrown.
+ */
+export async function syncNative(env: Env, id: number) {
+  const s = await getSettings(env);
+  const n = await env.DB.prepare("SELECT body, status, scheduled_at, native_id FROM notes WHERE id = ?")
+    .bind(id)
+    .first<{ body: string; status: string; scheduled_at: number | null; native_id: string | null }>();
+  if (!n) return;
+  const wanted = n.status === "scheduled" && !!n.scheduled_at && (s.publish_mode === "native" || !!n.native_id);
+  if (!wanted && !n.native_id) return;
+  const sid = await getSid(env, s);
+  try {
+    if (!sid) throw new Error("Cookie Substack mancante: inseriscilo nelle Impostazioni");
+    if (wanted && n.native_id) await substack.updateNative(sid, n.native_id, n.body, n.scheduled_at);
+    else if (wanted) {
+      const nativeId = await substack.scheduleNative(sid, n.body, n.scheduled_at!);
+      await env.DB.prepare("UPDATE notes SET native_id = ? WHERE id = ?").bind(nativeId, id).run();
+    } else {
+      await substack.deleteNative(sid, n.native_id!);
+      await env.DB.prepare("UPDATE notes SET native_id = NULL WHERE id = ?").bind(id).run();
+    }
+  } catch (e) {
+    if (wanted && !n.native_id) await env.DB.prepare("UPDATE notes SET status = 'draft', scheduled_at = NULL WHERE id = ?").bind(id).run();
+    throw new Error(`Substack: ${e instanceof Error ? e.message : e}`);
+  }
+}
+
+/** For Notes handed to Substack whose time has passed: records that they went out, or raises an alert. */
+export async function reconcileNative(env: Env) {
+  const now = Date.now();
+  const due = await env.DB.prepare("SELECT id, body, native_id, scheduled_at FROM notes WHERE status = 'scheduled' AND native_id IS NOT NULL AND scheduled_at < ? ORDER BY scheduled_at LIMIT 5")
+    .bind(now - 3 * 60_000)
+    .all<{ id: number; body: string; native_id: string; scheduled_at: number }>();
+  if (!due.results.length) return;
+  const sid = await getSid(env, await getSettings(env));
+  let pending: Set<string> | null = null;
+  try {
+    if (sid) pending = new Set((await substack.listNativeDrafts(sid)).map((d) => d.id));
+  } catch {
+    pending = null; // cannot tell right now: try again on the next run
+  }
+  for (const n of due.results) {
+    if (await substack.noteIsPublic(n.native_id)) {
+      await env.DB.prepare("UPDATE notes SET status = 'published', published_at = ?, substack_id = ?, error = NULL WHERE id = ?").bind(n.scheduled_at, n.native_id, n.id).run();
+    } else if (now - n.scheduled_at > 20 * 60_000) {
+      const still = pending?.has(n.native_id);
+      await raiseAlert(env, "native", "Una Note programmata su Substack non risulta uscita",
+        `${still ? "È ancora tra le bozze di Substack" : "Non la trovo né tra le bozze né sul profilo"}: ${n.body.slice(0, 120)}`, `native:${n.id}:${n.scheduled_at}`);
+      if (now - n.scheduled_at > 24 * 3600_000) await env.DB.prepare("UPDATE notes SET status = 'failed', error = 'Non risulta pubblicata da Substack' WHERE id = ?").bind(n.id).run();
+    }
   }
 }

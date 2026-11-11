@@ -507,5 +507,11 @@
  "Nessun orario ricorrente impostato: puoi comunque scegliere un orario qualsiasi, o definire i tuoi nelle Impostazioni.": "Nenhum horário recorrente definido: você ainda pode escolher qualquer horário, ou definir os seus nas Configurações.",
  "Qualsiasi giorno e ora, anche fuori dagli orari ricorrenti. Nell'orario di questo dispositivo. Lascia vuoto per tenerla tra le bozze.": "Qualquer dia e hora, mesmo fora dos seus horários recorrentes. No horário deste dispositivo. Deixe vazio para manter como rascunho.",
  "Nessuno slot orario disponibile: controlla orari e giorni nelle Impostazioni": "Nenhum horário disponível: confira horários e dias nas Configurações",
- "Togli": "Remover"
+ "Togli": "Remover",
+ "Chi pubblica le Notes programmate": "Quem publica as Notes agendadas",
+ "Notes Studio, con il suo timer": "Notes Studio, com o próprio timer",
+ "Substack, con la sua programmazione": "Substack, com o próprio agendamento",
+ "Con Substack, la Note gli viene consegnata nel momento in cui la programmi e la ritrovi tra le sue bozze: esce anche se questa app o il cookie hanno un problema. Vale per le Notes programmate da ora in poi.": "Com o Substack, a Note é entregue a ele no momento em que você agenda e aparece entre os rascunhos dele: ela sai mesmo que este app ou o cookie tenham um problema. Vale para as Notes agendadas a partir de agora.",
+ "affidata a Substack": "entregue ao Substack",
+ "Una Note programmata su Substack non risulta uscita": "Uma Note agendada no Substack parece não ter saído"
 }

@@ -82,7 +82,7 @@ async function call(path: string, init: RequestInit = {}, sid?: string): Promise
     throw new SubstackError(msg, res.status);
   }
   try {
-    return JSON.parse(text);
+    return text.trim() ? JSON.parse(text) : {}; // some calls (delete) answer with an empty body
   } catch {
     throw new SubstackError("Risposta non JSON da Substack", res.status);
   }
@@ -291,6 +291,51 @@ export async function publishNote(sid: string, text: string, parentId?: string):
   const id = data?.id ?? data?.comment?.id;
   if (!id) throw new SubstackError("Substack non ha restituito l'id della Note", 200);
   return String(id);
+}
+
+// ---- Substack's own Note scheduler ----
+// Read from Substack's public web code on 2026-11-11: a scheduled Note is a Note draft with a `trigger_at` time.
+// Substack then publishes it by itself, with no further call from us.
+
+const draftBody = (text: string, triggerAt: number | null) => ({
+  bodyJson: textToBodyJson(text),
+  tabId: "for-you",
+  surface: "feed",
+  replyMinimumRole: "everyone",
+  trigger_at: triggerAt ? new Date(triggerAt).toISOString() : null,
+});
+
+/** Hands a Note to Substack's scheduler. Returns the id of the Substack draft. */
+export async function scheduleNative(sid: string, text: string, triggerAt: number): Promise<string> {
+  const d = await call("/comment/draft", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draftBody(text, triggerAt)) }, sid);
+  const id = d?.id ?? d?.draft?.id ?? d?.comment?.id;
+  if (!id) throw new SubstackError("Substack non ha restituito l'id della Note programmata", 200);
+  return String(id);
+}
+
+export async function updateNative(sid: string, id: string, text: string, triggerAt: number | null) {
+  const b = draftBody(text, triggerAt);
+  await call(`/feed/comment/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bodyJson: b.bodyJson, replyMinimumRole: b.replyMinimumRole, trigger_at: b.trigger_at }) }, sid);
+}
+
+export async function deleteNative(sid: string, id: string) {
+  await call(`/comment/${id}`, { method: "DELETE" }, sid);
+}
+
+/** Ids of the Note drafts (scheduled or not) that still sit in Substack. */
+export async function listNativeDrafts(sid: string): Promise<{ id: string; triggerAt: number | null }[]> {
+  const d = await call("/feed/drafts?limit=20", {}, sid);
+  return (d.drafts ?? []).map((x: any) => ({ id: String(x.id), triggerAt: x.trigger_at ? Date.parse(x.trigger_at) : null }));
+}
+
+/** True when a Note with this id is publicly visible. */
+export async function noteIsPublic(id: string): Promise<boolean> {
+  try {
+    const d = await call(`/reader/comment/${id}`);
+    return !!d?.item?.comment?.id;
+  } catch {
+    return false;
+  }
 }
 
 /** Checks the session cookie. Returns the logged-in user's id and handle. */

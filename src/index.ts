@@ -676,6 +676,50 @@ app.delete("/api/materials/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+// ---------- today ----------
+
+/** One screen that answers "what should I do now": what waits for me, what goes out next, what is still to set up. */
+app.get("/api/today", async (c) => {
+  const s = await getSettings(c.env);
+  const now = Date.now();
+  const db = c.env.DB;
+  const one = async (sql: string, ...args: unknown[]) => ((await db.prepare(sql).bind(...args).first<{ n: number }>())?.n ?? 0);
+  const [replies, approvals, failed, scheduledCount, draftsCount, myNotes, published, follows, inspirations, materials, people, activityAll] = await Promise.all([
+    one("SELECT COUNT(*) AS n FROM activity WHERE status = 'open'"),
+    one("SELECT COUNT(*) AS n FROM notes WHERE reviewed = 0 AND status = 'draft'"),
+    one("SELECT COUNT(*) AS n FROM notes WHERE status IN ('failed','publishing')"),
+    one("SELECT COUNT(*) AS n FROM notes WHERE status = 'scheduled'"),
+    one("SELECT COUNT(*) AS n FROM notes WHERE status = 'draft' AND reviewed = 1"),
+    one("SELECT COUNT(*) AS n FROM my_notes"),
+    one("SELECT COUNT(*) AS n FROM notes WHERE status = 'published'"),
+    one("SELECT COUNT(*) AS n FROM follows"),
+    one("SELECT COUNT(*) AS n FROM inspirations"),
+    one("SELECT COUNT(*) AS n FROM materials"),
+    one("SELECT COUNT(*) AS n FROM people"),
+    one("SELECT COUNT(*) AS n FROM activity"),
+  ]);
+  const replyItems = (await db.prepare("SELECT reply_id, author_name, author_handle, body, date FROM activity WHERE status = 'open' ORDER BY date DESC LIMIT 3").all()).results;
+  const steps = (await db.prepare("SELECT user_id, name, handle, next_step, next_date FROM people WHERE circle = 1 AND next_date IS NOT NULL AND next_date <= ? ORDER BY next_date LIMIT 5").bind(now + 36 * 3600_000).all()).results;
+  const next = (await db.prepare("SELECT id, body, scheduled_at, native_id FROM notes WHERE status = 'scheduled' ORDER BY scheduled_at LIMIT 3").all()).results;
+  const last = await db.prepare("SELECT * FROM my_notes ORDER BY date DESC LIMIT 1").first();
+  const taken = new Set((await db.prepare("SELECT scheduled_at FROM notes WHERE status = 'scheduled'").all<{ scheduled_at: number }>()).results.map((r) => r.scheduled_at));
+  const freeSoon = nextSlots(40, JSON.parse(s.slots), s.timezone, taken, now, JSON.parse(s.slot_days)).filter((t) => t < now + 48 * 3600_000).length;
+  const profile = readProfile(s);
+  return c.json({
+    setup: [
+      { key: "handle", done: !!s.handle },
+      { key: "cookie", done: !!s.sid_enc && s.cookie_ok !== "0" },
+      { key: "first_note", done: published > 0 },
+      { key: "voice", done: !!composeVoice({ ...profile, language: "auto" }) || profile.samples.length > 0 },
+      { key: "alerts", done: !!s.alert_url },
+    ],
+    todo: { replies, reply_items: replyItems, steps, approvals, failed },
+    queue: { next, scheduled: scheduledCount, drafts: draftsCount, free_soon: freeSoon },
+    last,
+    has: { activity: activityAll > 0, feed: follows + inspirations > 0, materials: materials > 0, people: people > 0, stats: myNotes > 0 },
+  });
+});
+
 // ---------- alerts ----------
 
 app.get("/api/alerts", async (c) => {

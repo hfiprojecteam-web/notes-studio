@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Notes Studio</title>
+<style>
+  :root {
+    --bg: #f6f4ef; --panel: #fffdf9; --ink: #1d1b16; --muted: #6f6a5f; --line: #e2ddd1;
+    --accent: #c2410c; --accent-ink: #fff; --ok: #166534; --bad: #b91c1c; --chip: #efeae0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #16150f; --panel: #1f1d17; --ink: #ece8dd; --muted: #a29c8e; --line: #36332a;
+      --accent: #f97316; --accent-ink: #1b1206; --ok: #4ade80; --bad: #f87171; --chip: #2a2820; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
+  h1 { font: 600 17px/1 ui-serif, Georgia, serif; margin: 0; letter-spacing: .2px; }
+  nav { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
+  nav button { background: none; border: 0; color: var(--muted); padding: 7px 11px; border-radius: 7px; font: inherit; cursor: pointer; }
+  nav button.on { background: var(--chip); color: var(--ink); font-weight: 600; }
+  main { max-width: 860px; margin: 0 auto; padding: 20px 16px 80px; }
+  h2 { font: 600 20px/1.2 ui-serif, Georgia, serif; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .grow { flex: 1; min-width: 0; }
+  textarea, input, select { width: 100%; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; font: inherit; }
+  textarea { min-height: 96px; resize: vertical; }
+  input[type=datetime-local], input.small, select.small { width: auto; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  button.btn { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 8px 13px; font: 600 14px/1.2 inherit; cursor: pointer; }
+  button.ghost { background: none; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; font: 14px/1.2 inherit; cursor: pointer; }
+  button.link { background: none; border: 0; color: var(--muted); font: 13px inherit; cursor: pointer; padding: 4px 6px; text-decoration: underline; }
+  button:disabled { opacity: .5; cursor: default; }
+  .body { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .meta { font-size: 13px; color: var(--muted); }
+  .chip { display: inline-block; background: var(--chip); border-radius: 99px; padding: 2px 9px; font-size: 12px; }
+  .chip.failed { color: var(--bad); } .chip.published { color: var(--ok); }
+  .err { color: var(--bad); font-size: 13px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .stat b { display: block; font: 600 24px/1.2 ui-serif, Georgia, serif; }
+  .bars { display: flex; align-items: flex-end; gap: 3px; height: 110px; }
+  .bars div { flex: 1; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; opacity: .85; }
+  .bars div.empty { background: var(--line); }
+  .axis { display: flex; gap: 3px; font-size: 10px; color: var(--muted); }
+  .axis span { flex: 1; text-align: center; }
+  table { width: 100%; border-collapse: collapse; } td, th { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  #toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 15px; border-radius: 8px; display: none; max-width: 90vw; z-index: 9; }
+  #login { max-width: 340px; margin: 14vh auto; }
+  .hidden { display: none !important; }
+  kbd { background: var(--chip); border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+  .focus { outline: 2px solid var(--accent); }
+</style>
+</head>
+<body>
+<div id="login" class="card hidden">
+  <h2>Notes Studio</h2>
+  <p class="sub">Accesso riservato.</p>
+  <form id="loginForm"><input type="password" id="pw" placeholder="Password" autocomplete="current-password" autofocus>
+  <p class="err" id="loginErr"></p><button class="btn">Entra</button></form>
+</div>
+
+<div id="app" class="hidden">
+<header>
+  <h1>Notes Studio</h1>
+  <nav id="nav"></nav>
+  <button class="link" id="logout">Esci</button>
+</header>
+<main id="view"></main>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = (ms) => ms ? new Date(ms).toLocaleString("it-IT", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+const toLocalInput = (ms) => { const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); };
+
+let toastTimer;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.style.display = "none"), 4200); }
+
+async function api(path, method = "GET", body) {
+  const res = await fetch("/api" + path, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+  if (res.status === 401 && path !== "/login") { showLogin(); throw new Error("Sessione scaduta"); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Errore " + res.status);
+  return data;
+}
+// Runs an action, disables the button meanwhile, shows errors as a toast.
+async function act(btn, fn) {
+  if (btn) btn.disabled = true;
+  try { await fn(); } catch (e) { toast(e.message); } finally { if (btn) btn.disabled = false; }
+}
+
+const TABS = { queue: "Coda", generate: "Genera", stats: "Statistiche", activity: "Attività", follows: "Follows", settings: "Impostazioni" };
+let tab = location.hash.slice(1) in TABS ? location.hash.slice(1) : "queue";
+
+function showLogin() { $("#app").classList.add("hidden"); $("#login").classList.remove("hidden"); }
+function showApp() {
+  $("#login").classList.add("hidden"); $("#app").classList.remove("hidden");
+  $("#nav").innerHTML = Object.entries(TABS).map(([k, v]) => `<button data-tab="${k}" class="${k === tab ? "on" : ""}">${v}</button>`).join("");
+  render();
+}
+$("#nav").onclick = (e) => { const t = e.target.dataset.tab; if (t) { tab = t; location.hash = t; showApp(); } };
+$("#loginForm").onsubmit = async (e) => {
+  e.preventDefault();
+  try { await api("/login", "POST", { password: $("#pw").value }); $("#pw").value = ""; showApp(); }
+  catch (err) { $("#loginErr").textContent = err.message; }
+};
+$("#logout").onclick = async () => { await api("/logout", "POST"); showLogin(); };
+
+const views = {};
+async function render() {
+  const v = $("#view");
+  v.innerHTML = '<p class="sub">Caricamento…</p>';
+  try { await views[tab](v); } catch (e) { if (e.message !== "Sessione scaduta") v.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+}
+
+// ---------- Coda ----------
+views.queue = async (v) => {
+  const notes = await api("/notes");
+  const by = (s) => notes.filter((n) => n.status === s);
+  const drafts = by("draft"), sched = by("scheduled"), failed = [...by("failed"), ...by("publishing")], pub = by("published");
+  const card = (n) => `
+    <div class="card" data-id="${n.id}">
+      <div class="row meta" style="margin-bottom:6px">
+        <span class="chip ${n.status}">${{ draft: "Bozza", scheduled: "In coda", failed: "Errore", publishing: "In pubblicazione", published: "Pubblicata" }[n.status]}</span>
+        ${n.status === "scheduled" ? `<span>${fmt(n.scheduled_at)}</span>` : ""}
+        ${n.status === "published" ? `<span>${fmt(n.published_at)}</span>` : ""}
+        ${n.source === "generated" ? '<span class="chip">generata</span>' : ""}
+        <span class="grow"></span><span>${n.body.length} caratteri</span>
+      </div>
+      <div class="body">${esc(n.body)}</div>
+      ${n.error ? `<p class="err">${esc(n.error)}</p>` : ""}
+      ${n.status === "publishing" ? '<p class="meta">Bloccata in pubblicazione: controlla su Substack se è uscita prima di ripubblicarla.</p>' : ""}
+      ${n.status !== "published" && n.status !== "publishing" ? `
+      <div class="row" style="margin-top:10px">
+        <input type="datetime-local" class="when" value="${n.scheduled_at ? toLocalInput(n.scheduled_at) : ""}">
+        <button class="ghost" data-a="setTime">Programma</button>
+        ${n.status === "scheduled" ? '<button class="ghost" data-a="unschedule">Togli dalla coda</button>' : ""}
+        <span class="grow"></span>
+        <button class="link" data-a="edit">Modifica</button>
+        <button class="link" data-a="now">Pubblica ora</button>
+        <button class="link" data-a="del">Elimina</button>
+      </div>` : ""}
+    </div>`;
+  v.innerHTML = `
+    <h2>Coda</h2><p class="sub">Scrivi, metti in coda e lascia che le Notes escano agli orari scelti.</p>
+    <div class="card">
+      <textarea id="newBody" placeholder="Scrivi una Note. Per importarne molte insieme, separale con una riga che contiene solo ---"></textarea>
+      <div class="row" style="margin-top:8px">
+        <span class="meta" id="count">0 caratteri</span><span class="grow"></span>
+        <button class="ghost" id="addDraft">Salva come bozza</button>
+        <button class="btn" id="addQueue">Aggiungi alla coda</button>
+      </div>
+    </div>
+    ${failed.length ? `<h3>Da controllare (${failed.length})</h3>${failed.map(card).join("")}` : ""}
+    <div class="row" style="margin:18px 0 8px"><h3 style="margin:0" class="grow">In coda (${sched.length})</h3>
+      ${sched.length ? '<button class="ghost" id="unAll">Svuota coda</button>' : ""}</div>
+    ${sched.map(card).join("") || '<p class="sub">Nessuna Note programmata.</p>'}
+    <div class="row" style="margin:18px 0 8px"><h3 style="margin:0" class="grow">Bozze (${drafts.length})</h3>
+      ${drafts.length ? '<button class="btn" id="schedAll">Programma tutte nei prossimi slot</button>' : ""}</div>
+    ${drafts.map(card).join("") || '<p class="sub">Nessuna bozza.</p>'}
+    ${pub.length ? `<h3 style="margin-top:18px">Pubblicate da qui (${pub.length})</h3>${pub.slice(0, 30).map(card).join("")}` : ""}`;
+
+  const nb = $("#newBody"); nb.oninput = () => ($("#count").textContent = nb.value.length + " caratteri");
+  const add = (queue) => (e) => act(e.target, async () => {
+    const bodies = nb.value.split(/\n\s*---\s*\n/).map((s) => s.trim()).filter(Boolean);
+    if (!bodies.length) throw new Error("Scrivi qualcosa prima");
+    await api("/notes", "POST", { bodies });
+    if (queue) await api("/notes/schedule", "POST", {});
+    toast(bodies.length + (queue ? " in coda" : " salvate come bozza")); render();
+  });
+  $("#addDraft").onclick = add(false); $("#addQueue").onclick = add(true);
+  if ($("#schedAll")) $("#schedAll").onclick = (e) => act(e.target, async () => { const r = await api("/notes/schedule", "POST", {}); toast(r.scheduled + " Notes programmate"); render(); });
+  if ($("#unAll")) $("#unAll").onclick = (e) => act(e.target, async () => { if (!confirm("Riportare tutte le Notes in coda a bozza?")) return; await api("/notes/unschedule", "POST"); render(); });
+
+  v.onclick = (e) => {
+    const a = e.target.dataset.a; if (!a) return;
+    const el = e.target.closest(".card"), id = el.dataset.id, n = notes.find((x) => x.id == id);
+    act(e.target, async () => {
+      if (a === "setTime") { const w = $(".when", el).value; if (!w) throw new Error("Scegli data e ora"); await api("/notes/" + id, "PUT", { scheduled_at: new Date(w).getTime() }); }
+      if (a === "unschedule") await api("/notes/" + id, "PUT", { scheduled_at: null });
+      if (a === "del") { if (!confirm("Eliminare questa Note?")) return; await api("/notes/" + id, "DELETE"); }
+      if (a === "now") { if (!confirm("Pubblicare subito su Substack?")) return; await api("/notes/" + id + "/publish", "POST"); toast("Pubblicata"); }
+      if (a === "edit") {
+        $(".body", el).outerHTML = `<textarea class="editBody">${esc(n.body)}</textarea><div class="row" style="margin-top:6px"><button class="btn" data-a="save">Salva</button><button class="ghost" data-a="cancel">Annulla</button></div>`;
+        return;
+      }
+      if (a === "save") await api("/notes/" + id, "PUT", { body: $(".editBody", el).value });
+      render();
+    });
+  };
+};
+
+// ---------- Genera ----------
+views.generate = async (v) => {
+  const s = await api("/settings");
+  v.innerHTML = `
+    <h2>Genera</h2><p class="sub">Claude scrive bozze nella tua voce, usando come riferimento le tue Notes pubblicate e le istruzioni nelle Impostazioni.</p>
+    ${s.has_claude_key ? "" : '<p class="err">ANTHROPIC_API_KEY non è configurata: la generazione non funzionerà.</p>'}
+    <div class="card">
+      <label>Idea o tema</label><textarea id="gTopic" placeholder="Es. perché la costanza batte il talento quando si scrive online"></textarea>
+      <label>Oppure il link di un tuo post Substack</label><input id="gUrl" placeholder="https://tuonome.substack.com/p/titolo-del-post">
+      <label>Oppure incolla il testo di un articolo</label><textarea id="gText"></textarea>
+      <div class="row" style="margin-top:12px">
+        <label style="margin:0">Quante Notes</label><input id="gCount" class="small" type="number" min="1" max="20" value="5" style="width:80px">
+        <span class="grow"></span><button class="btn" id="gGo">Genera bozze</button>
+      </div>
+      <p class="meta" id="gMsg"></p>
+    </div>`;
+  $("#gGo").onclick = (e) => act(e.target, async () => {
+    $("#gMsg").textContent = "Sto scrivendo… può volerci fino a un minuto.";
+    try {
+      const r = await api("/generate", "POST", { topic: $("#gTopic").value, source_url: $("#gUrl").value, source_text: $("#gText").value, count: +$("#gCount").value });
+      toast(r.created + " bozze create"); tab = "queue"; location.hash = "queue"; showApp();
+    } finally { if ($("#gMsg")) $("#gMsg").textContent = ""; }
+  });
+};
+
+// ---------- Statistiche ----------
+let statDays = 90;
+views.stats = async (v) => {
+  const d = await api("/stats?days=" + statDays);
+  const bars = (rows, keys, label) => {
+    const map = new Map(rows.map((r) => [String(r.key), r])); const max = Math.max(1, ...rows.map((r) => r.avg));
+    return `<div class="bars">${keys.map((k) => { const r = map.get(String(k)); return `<div class="${r ? "" : "empty"}" style="height:${r ? Math.max(3, (r.avg / max) * 100) : 2}%" title="${label(k)}: media ${r ? r.avg : 0} su ${r ? r.count : 0} Notes"></div>`; }).join("")}</div>
+            <div class="axis">${keys.map((k) => `<span>${label(k)}</span>`).join("")}</div>`;
+  };
+  const wd = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], wdIt = { Mon: "Lun", Tue: "Mar", Wed: "Mer", Thu: "Gio", Fri: "Ven", Sat: "Sab", Sun: "Dom" };
+  v.innerHTML = `
+    <div class="row"><div class="grow"><h2>Statistiche</h2><p class="sub">Interazioni pubbliche delle tue Notes (like, restack, risposte). ${d.last_sync ? "Aggiornate " + fmt(d.last_sync) + "." : "Mai sincronizzate."}</p></div>
+      <select id="days" class="small">${[30, 90, 365, 3650].map((x) => `<option value="${x}" ${x === statDays ? "selected" : ""}>${x === 3650 ? "Sempre" : "Ultimi " + x + " giorni"}</option>`).join("")}</select>
+      <button class="ghost" id="syncNow">Sincronizza</button><button class="ghost" id="syncDeep" title="Scarica anche le Notes più vecchie">Importa storico</button></div>
+    <div class="stats">
+      <div class="card stat"><b>${d.total}</b>Notes</div><div class="card stat"><b>${d.likes}</b>Like</div>
+      <div class="card stat"><b>${d.restacks}</b>Restack</div><div class="card stat"><b>${d.replies}</b>Risposte</div>
+      <div class="card stat"><b>${d.total ? ((d.likes + d.restacks + d.replies) / d.total).toFixed(1) : 0}</b>Interazioni medie</div>
+    </div>
+    ${d.total ? `
+    <div class="card"><b>Interazioni medie per ora di pubblicazione</b><p class="meta">Passa sopra una barra per i dettagli. Le ore con poche Notes sono poco affidabili.</p>${bars(d.by_hour, [...Array(24).keys()], (k) => k)}</div>
+    <div class="card"><b>Per giorno della settimana</b>${bars(d.by_weekday, wd, (k) => wdIt[k])}</div>
+    <div class="card"><b>Per lunghezza</b><table>${d.by_length.map((r) => `<tr><td>${esc(r.key)}</td><td>${r.count} Notes</td><td>media ${r.avg}</td></tr>`).join("")}</table></div>
+    <h3>Le tue Notes migliori</h3>
+    ${d.top.map((n) => `<div class="card"><div class="body">${esc(n.body)}</div><div class="row meta" style="margin-top:8px"><span>${fmt(n.date)}</span><span>♥ ${n.likes}</span><span>↻ ${n.restacks}</span><span>💬 ${n.replies}</span><span class="grow"></span><button class="link" data-reuse="${n.substack_id}">Riusa come bozza</button><a class="meta" href="https://substack.com/note/c-${n.substack_id}" target="_blank" rel="noopener">Apri</a></div></div>`).join("")}`
+    : '<div class="card">Nessuna Note in questo periodo. Imposta il tuo handle nelle Impostazioni e premi <b>Importa storico</b>.</div>'}`;
+  $("#days").onchange = (e) => { statDays = +e.target.value; render(); };
+  $("#syncNow").onclick = (e) => act(e.target, async () => { const r = await api("/sync", "POST"); toast(`Sincronizzate ${r.myNotes} Notes`); render(); });
+  $("#syncDeep").onclick = (e) => act(e.target, async () => { const r = await api("/sync?deep=1", "POST"); toast(`Importate ${r.myNotes} Notes`); render(); });
+  v.onclick = (e) => { const id = e.target.dataset.reuse; if (!id) return; act(e.target, async () => { await api("/notes", "POST", { body: d.top.find((n) => n.substack_id === id).body }); toast("Copiata nelle bozze"); }); };
+};
+
+// ---------- Attività ----------
+views.activity = async (v) => {
+  const items = await api("/activity");
+  let cur = 0;
+  v.innerHTML = `
+    <h2>Attività</h2><p class="sub">Risposte alle tue Notes degli ultimi 14 giorni a cui non hai ancora risposto. <kbd>J</kbd>/<kbd>K</kbd> per scorrere, <kbd>R</kbd> per rispondere, <kbd>E</kbd> per archiviare.</p>
+    ${items.map((a, i) => `
+      <div class="card" data-i="${i}" data-id="${a.reply_id}">
+        <div class="meta">In risposta a: ${esc((a.note_body || "").slice(0, 140))}${(a.note_body || "").length > 140 ? "…" : ""}</div>
+        <p style="margin:8px 0"><b>${esc(a.author_name || a.author_handle || "Qualcuno")}</b> <span class="meta">${fmt(a.date)}</span></p>
+        <div class="body">${esc(a.body)}</div>
+        <div class="row" style="margin-top:10px"><input class="grow reply" placeholder="Scrivi una risposta…"><button class="btn" data-a="reply">Rispondi</button>
+          <button class="ghost" data-a="done">Archivia</button><a class="meta" href="https://substack.com/note/c-${a.reply_id}" target="_blank" rel="noopener">Apri</a></div>
+      </div>`).join("") || '<div class="card">Tutto fatto: nessuna risposta in sospeso.</div>'}`;
+  const cards = () => [...v.querySelectorAll(".card[data-i]")];
+  const focus = () => { cards().forEach((c, i) => c.classList.toggle("focus", i === cur)); cards()[cur]?.scrollIntoView({ block: "nearest" }); };
+  const done = async (el, btn, send) => act(btn, async () => {
+    if (send) { const t = $(".reply", el).value.trim(); if (!t) throw new Error("Scrivi la risposta"); await api(`/activity/${el.dataset.id}/reply`, "POST", { body: t }); toast("Risposta inviata"); }
+    else await api(`/activity/${el.dataset.id}/done`, "POST");
+    el.remove(); cur = Math.min(cur, cards().length - 1); focus();
+  });
+  v.onclick = (e) => { const a = e.target.dataset.a; if (a) done(e.target.closest(".card"), e.target, a === "reply"); };
+  v.onkeydown = (e) => { if (e.key === "Enter" && e.target.classList.contains("reply")) done(e.target.closest(".card"), null, true); if (e.key === "Escape") e.target.blur(); };
+  document.onkeydown = (e) => {
+    if (tab !== "activity" || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || !cards().length) return;
+    if (e.key === "j") { cur = Math.min(cur + 1, cards().length - 1); focus(); }
+    if (e.key === "k") { cur = Math.max(cur - 1, 0); focus(); }
+    if (e.key === "r") { e.preventDefault(); $(".reply", cards()[cur]).focus(); }
+    if (e.key === "e") done(cards()[cur], null, false);
+  };
+  focus();
+};
+
+// ---------- Follows ----------
+views.follows = async (v) => {
+  const d = await api("/follows");
+  v.innerHTML = `
+    <h2>Follows</h2><p class="sub">Le ultime Notes dei creator che vuoi seguire da vicino (massimo 20).</p>
+    <div class="card"><div class="row"><input id="fHandle" class="grow" placeholder="Handle o link al profilo, es. @nomecreator"><button class="btn" id="fAdd">Aggiungi</button></div>
+      <div class="row" style="margin-top:10px">${d.follows.map((f) => `<span class="chip">${esc(f.name || f.handle)} <button class="link" data-rm="${esc(f.handle)}" title="Rimuovi">×</button></span>`).join("")}</div></div>
+    ${d.feed.map((n) => `<div class="card"><p style="margin:0 0 6px"><b>${esc(n.name || n.handle)}</b> <span class="meta">${fmt(n.date)}</span></p><div class="body">${esc(n.body)}</div>
+      <div class="row meta" style="margin-top:8px"><span>♥ ${n.likes}</span><span>↻ ${n.restacks}</span><span>💬 ${n.replies}</span><span class="grow"></span><a class="meta" href="https://substack.com/note/c-${n.substack_id}" target="_blank" rel="noopener">Apri e rispondi su Substack</a></div></div>`).join("") || '<p class="sub">Aggiungi un creator per vedere le sue Notes.</p>'}`;
+  $("#fAdd").onclick = (e) => act(e.target, async () => { const r = await api("/follows", "POST", { handle: $("#fHandle").value }); toast("Aggiunto " + (r.name || "")); render(); });
+  v.onclick = (e) => { const h = e.target.dataset.rm; if (h) act(e.target, async () => { await api("/follows/" + encodeURIComponent(h), "DELETE"); render(); }); };
+};
+
+// ---------- Impostazioni ----------
+views.settings = async (v) => {
+  const s = await api("/settings");
+  v.innerHTML = `
+    <h2>Impostazioni</h2><p class="sub">Collegamento a Substack, orari di pubblicazione e voce.</p>
+    <div class="card">
+      <label>Il tuo handle Substack</label><input id="sHandle" value="${esc(s.handle)}" placeholder="nomeutente (senza @)">
+      <label>Cookie di sessione Substack (<code>substack.sid</code>) — ${s.has_cookie ? "già salvato, compila solo per sostituirlo" : "non ancora impostato"}</label>
+      <input id="sCookie" type="password" autocomplete="off" placeholder="${s.has_cookie ? "••••••••" : "Incolla il valore del cookie"}">
+      <p class="meta">Su substack.com, da loggato: Strumenti per sviluppatori → Application → Cookies → <code>substack.sid</code>. Viene salvato cifrato e non è mai mostrato di nuovo. Chi lo possiede può agire come te su Substack.</p>
+      <label>Fuso orario</label><input id="sTz" value="${esc(s.timezone)}">
+      <label>Slot di pubblicazione giornalieri (HH:MM separati da virgola)</label><input id="sSlots" value="${esc(s.slots.join(", "))}">
+      <label>Istruzioni per la tua voce (usate dal generatore)</label>
+      <textarea id="sVoice" placeholder="Es. Scrivo in italiano, tono diretto, frasi brevi, niente emoji né hashtag. Parlo di self-publishing a chi parte da zero.">${esc(s.voice_prompt)}</textarea>
+      <div class="row" style="margin-top:12px"><button class="btn" id="sSave">Salva</button><button class="ghost" id="sTest">Verifica collegamento</button></div>
+    </div>
+    <div id="diag"></div>
+    ${s.last_sync_error ? `<p class="err">Ultima sincronizzazione: ${esc(s.last_sync_error)}</p>` : ""}`;
+  $("#sSave").onclick = (e) => act(e.target, async () => {
+    await api("/settings", "PUT", { handle: $("#sHandle").value, cookie: $("#sCookie").value || undefined, timezone: $("#sTz").value.trim(), slots: $("#sSlots").value.split(","), voice_prompt: $("#sVoice").value });
+    toast("Impostazioni salvate"); render();
+  });
+  $("#sTest").onclick = (e) => act(e.target, async () => {
+    const r = await api("/diagnostics");
+    $("#diag").innerHTML = `<div class="card"><table>${r.map((x) => `<tr><td>${x.ok ? "✅" : "❌"}</td><td>${esc(x.check)}</td><td class="meta">${esc(x.detail)}</td></tr>`).join("")}</table></div>`;
+  });
+};
+
+api("/settings").then(showApp).catch(() => {});
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "notes-studio",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "./public" },
+  "triggers": { "crons": ["* * * * *"] },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "notes-studio",
+      // Sostituisci con l'id restituito da: npx wrangler d1 create notes-studio
+      "database_id": "00000000-0000-0000-0000-000000000000"
+    }
+  ]
+}

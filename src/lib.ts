@@ -1,0 +1,159 @@
+export interface Env {
+  DB: D1Database;
+  APP_PASSWORD: string; // login password for the app
+  SECRET_KEY: string; // random string: signs sessions and encrypts the Substack cookie
+  ANTHROPIC_API_KEY?: string;
+  SUBSTACK_API_BASE?: string; // tests only
+}
+
+const enc = new TextEncoder();
+const hex = (buf: ArrayBuffer) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+const b64 = (buf: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(buf as ArrayBuffer)));
+const unb64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+// ---------- sessions ----------
+
+async function hmac(secret: string, data: string) {
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return hex(await crypto.subtle.sign("HMAC", key, enc.encode(data)));
+}
+
+function safeEqual(a: string, b: string) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+export async function passwordMatches(env: Env, given: string) {
+  // Compare HMACs so the comparison is constant-time regardless of length.
+  return safeEqual(await hmac(env.SECRET_KEY, given), await hmac(env.SECRET_KEY, env.APP_PASSWORD));
+}
+
+export async function makeSession(env: Env) {
+  const exp = Date.now() + 30 * 86400_000;
+  return `${exp}.${await hmac(env.SECRET_KEY, `session:${exp}`)}`;
+}
+
+export async function sessionValid(env: Env, token: string | undefined) {
+  if (!token) return false;
+  const [exp, sig] = token.split(".");
+  if (!exp || !sig || Number(exp) < Date.now()) return false;
+  return safeEqual(sig, await hmac(env.SECRET_KEY, `session:${exp}`));
+}
+
+// ---------- encryption of the Substack cookie at rest ----------
+
+async function aesKey(secret: string) {
+  const raw = await crypto.subtle.digest("SHA-256", enc.encode(`enc:${secret}`));
+  return crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+
+export async function encrypt(env: Env, plain: string) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await aesKey(env.SECRET_KEY), enc.encode(plain));
+  return `${b64(iv)}.${b64(ct)}`;
+}
+
+export async function decrypt(env: Env, stored: string) {
+  const [iv, ct] = stored.split(".");
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(iv) }, await aesKey(env.SECRET_KEY), unb64(ct));
+  return new TextDecoder().decode(pt);
+}
+
+// ---------- settings ----------
+
+export interface Settings {
+  handle: string;
+  user_id: string;
+  timezone: string;
+  slots: string; // JSON array of "HH:MM"
+  voice_prompt: string;
+  sid_enc: string;
+  last_sync: string;
+  last_sync_error: string;
+}
+
+const DEFAULTS: Settings = {
+  handle: "",
+  user_id: "",
+  timezone: "Europe/Rome",
+  slots: '["09:00","13:00","18:30"]',
+  voice_prompt: "",
+  sid_enc: "",
+  last_sync: "",
+  last_sync_error: "",
+};
+
+export async function getSettings(env: Env): Promise<Settings> {
+  const { results } = await env.DB.prepare("SELECT key, value FROM settings").all<{ key: string; value: string }>();
+  const out = { ...DEFAULTS } as Record<string, string>;
+  for (const r of results) out[r.key] = r.value;
+  return out as unknown as Settings;
+}
+
+export async function setSetting(env: Env, key: keyof Settings, value: string) {
+  await env.DB.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+    .bind(key, value)
+    .run();
+}
+
+export async function getSid(env: Env, s: Settings): Promise<string | null> {
+  if (!s.sid_enc) return null;
+  try {
+    return await decrypt(env, s.sid_enc);
+  } catch {
+    return null;
+  }
+}
+
+// ---------- time slots ----------
+
+/** Parts of a UTC instant as seen on a wall clock in `tz`. */
+export function localParts(ms: number, tz: string) {
+  const f = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    weekday: "short",
+    hourCycle: "h23",
+  });
+  const p = Object.fromEntries(f.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+  return { y: +p.year, m: +p.month, d: +p.day, h: +p.hour, min: +p.minute, weekday: p.weekday as string };
+}
+
+/** Epoch ms of a wall-clock time in `tz`. */
+export function zonedToUtc(y: number, m: number, d: number, h: number, min: number, tz: string) {
+  let guess = Date.UTC(y, m - 1, d, h, min);
+  // Two passes handle the DST edge where the first offset guess is off by an hour.
+  for (let i = 0; i < 2; i++) {
+    const p = localParts(guess, tz);
+    const seen = Date.UTC(p.y, p.m - 1, p.d, p.h, p.min);
+    guess += Date.UTC(y, m - 1, d, h, min) - seen;
+  }
+  return guess;
+}
+
+/** The next `count` free slot times after `from`, skipping the ones in `taken`. */
+export function nextSlots(count: number, slots: string[], tz: string, taken: Set<number>, from = Date.now()) {
+  const sorted = [...slots].sort();
+  const out: number[] = [];
+  if (!sorted.length) return out;
+  const start = localParts(from, tz);
+  for (let day = 0; out.length < count && day < 400; day++) {
+    // Walk calendar days via UTC noon so month/year rollovers are handled by Date.
+    const base = new Date(Date.UTC(start.y, start.m - 1, start.d + day, 12));
+    for (const s of sorted) {
+      const [h, min] = s.split(":").map(Number);
+      const t = zonedToUtc(base.getUTCFullYear(), base.getUTCMonth() + 1, base.getUTCDate(), h, min, tz);
+      if (t > from + 60_000 && !taken.has(t)) {
+        out.push(t);
+        if (out.length === count) break;
+      }
+    }
+  }
+  return out;
+}

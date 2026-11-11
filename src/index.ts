@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { Env, encrypt, getSettings, getSid, localParts, zonedToUtc, makeSession, nextSlots, passwordMatches, sessionValid, setSetting, madeOwn } from "./lib";
 import { checkCookie, personUpdate, publishOne, sync, tick } from "./jobs";
-import { EMPTY_PROFILE, Voice, VoiceProfile, analyzeVoice, composeVoice, generateNotes, generateOutlines, isRewriteMode, remixInspiration, rewriteNote, suggestReply } from "./generate";
+import { EMPTY_PROFILE, Voice, VoiceProfile, analyzeVoice, composeVoice, generateNotes, generateOutlines, isMessageKind, personalMessage, isRewriteMode, remixInspiration, rewriteNote, suggestReply } from "./generate";
 import * as substack from "./substack";
 import page from "../public/index.html";
 
@@ -590,14 +590,43 @@ app.delete("/api/materials/:id", async (c) => {
 
 const TAGS = ["lettore", "creator", "imprenditore", "competitor", "coopetitor"];
 
+/** Subscription to MY publication, read from the person's public subscriptions (or set by hand). */
+function subState(p: any, mySubdomain: string): "paid" | "free" | "none" | null {
+  if (p.sub_manual) return p.sub_manual;
+  if (!Array.isArray(p.subscriptions) || !mySubdomain) return null;
+  const mine = p.subscriptions.find((x: any) => x.subdomain === mySubdomain);
+  if (!mine) return p.subs_truncated ? null : "none";
+  return mine.founding || mine.state === "subscribed" ? "paid" : "free";
+}
+
 app.get("/api/people", async (c) => {
+  const s = await getSettings(c.env);
   const { results } = await c.env.DB.prepare(
     `SELECT p.*, COUNT(a.reply_id) AS interactions, MAX(a.date) AS last_interaction,
-            SUM(CASE WHEN a.status = 'open' THEN 1 ELSE 0 END) AS waiting
+            SUM(CASE WHEN a.status = 'open' THEN 1 ELSE 0 END) AS waiting,
+            (SELECT MAX(date) FROM contacts k WHERE k.user_id = p.user_id) AS last_contact
      FROM people p LEFT JOIN activity a ON a.author_id = p.user_id
      GROUP BY p.user_id ORDER BY waiting DESC, interactions DESC, COALESCE(p.followers, 0) DESC LIMIT 300`,
   ).all();
-  return c.json({ tags: TAGS, people: results.map((r: any) => ({ ...r, subscriptions: r.subscriptions ? JSON.parse(r.subscriptions) : null })) });
+  const people = results.map((r: any) => {
+    const p = { ...r, subscriptions: r.subscriptions ? JSON.parse(r.subscriptions) : null };
+    p.sub_state = subState(p, s.pub_subdomain);
+    // Why this person may be worth adding to the circle. Each reason is a fact, shown as is.
+    const paysOthers = (p.subscriptions ?? []).filter((x: any) => x.subdomain !== s.pub_subdomain && (x.founding || x.state === "subscribed")).length;
+    const reasons: string[] = [];
+    let score = 0;
+    if (p.sub_state === "paid") { score += 6; reasons.push("È tuo abbonato a pagamento"); }
+    if (p.sub_state === "free") { score += 4; reasons.push("È iscritto alla tua pubblicazione"); }
+    if (p.interactions >= 2) { score += 3; reasons.push(`Ti ha risposto ${p.interactions} volte`); }
+    else if (p.interactions === 1) { score += 1; reasons.push("Ti ha risposto 1 volta"); }
+    if (paysOthers) { score += 2; reasons.push(`Paga già ${paysOthers} newsletter`); }
+    if ((p.followers ?? 0) >= 1000) { score += 2; reasons.push(`Ha ${p.followers} follower`); }
+    p.reasons = reasons;
+    p.score = score;
+    p.suggested = !p.circle && !p.dismissed && score >= 3;
+    return p;
+  });
+  return c.json({ tags: TAGS, people });
 });
 
 /** Looks up any Substack profile by handle and stores it. */
@@ -608,14 +637,57 @@ app.post("/api/people", async (c) => {
   const sid = (await getSid(c.env, await getSettings(c.env))) ?? undefined;
   const p = await substack.getFullProfile(clean, sid);
   await personUpdate(c.env, p, Date.now()).run();
+  await c.env.DB.prepare("UPDATE people SET circle = 1, dismissed = 0 WHERE user_id = ?").bind(p.id).run();
   return c.json({ ok: true, name: p.name, user_id: p.id });
 });
 
 app.put("/api/people/:id", async (c) => {
-  const { tag } = await c.req.json<{ tag: string | null }>();
-  if (tag && !TAGS.includes(tag)) return c.json({ error: "Etichetta non valida" }, 400);
-  await c.env.DB.prepare("UPDATE people SET tag = ? WHERE user_id = ?").bind(tag || null, Number(c.req.param("id"))).run();
+  const id = Number(c.req.param("id"));
+  const b = await c.req.json<{ tag?: string | null; circle?: boolean; dismissed?: boolean; sub_manual?: string | null; note?: string; next_step?: string; next_date?: number | null }>();
+  if (b.tag && !TAGS.includes(b.tag)) return c.json({ error: "Etichetta non valida" }, 400);
+  if (b.sub_manual && !["paid", "free", "none"].includes(b.sub_manual)) return c.json({ error: "Stato non valido" }, 400);
+  const set: string[] = [];
+  const val: unknown[] = [];
+  const put = (col: string, v: unknown) => { set.push(`${col} = ?`); val.push(v); };
+  if (b.tag !== undefined) put("tag", b.tag || null);
+  if (b.circle !== undefined) put("circle", b.circle ? 1 : 0);
+  if (b.dismissed !== undefined) put("dismissed", b.dismissed ? 1 : 0);
+  if (b.sub_manual !== undefined) put("sub_manual", b.sub_manual || null);
+  if (b.note !== undefined) put("note", String(b.note).slice(0, 4000));
+  if (b.next_step !== undefined) put("next_step", String(b.next_step).slice(0, 300));
+  if (b.next_date !== undefined) put("next_date", b.next_date || null);
+  if (set.length) await c.env.DB.prepare(`UPDATE people SET ${set.join(", ")} WHERE user_id = ?`).bind(...val, id).run();
   return c.json({ ok: true });
+});
+
+// Contact log: what I wrote to someone and how it went. Sending always happens by hand, outside the app.
+app.get("/api/people/:id/contacts", async (c) => {
+  return c.json((await c.env.DB.prepare("SELECT * FROM contacts WHERE user_id = ? ORDER BY date DESC LIMIT 100").bind(Number(c.req.param("id"))).all()).results);
+});
+
+app.post("/api/people/:id/contacts", async (c) => {
+  const b = await c.req.json<{ kind?: string; text?: string; outcome?: string }>();
+  if (!b.text?.trim() && !b.outcome?.trim()) return c.json({ error: "Scrivi cosa hai inviato o com'è andata" }, 400);
+  await c.env.DB.prepare("INSERT INTO contacts (user_id, date, kind, text, outcome) VALUES (?,?,?,?,?)")
+    .bind(Number(c.req.param("id")), Date.now(), String(b.kind ?? "").slice(0, 40), String(b.text ?? "").slice(0, 4000), String(b.outcome ?? "").slice(0, 1000))
+    .run();
+  return c.json({ ok: true });
+});
+
+app.post("/api/people/:id/message", async (c) => {
+  const key = await claudeKey(c.env);
+  const { kind } = await c.req.json<{ kind: string }>();
+  if (!isMessageKind(kind)) return c.json({ error: "Tipo di messaggio non valido" }, 400);
+  const id = Number(c.req.param("id"));
+  const p = await c.env.DB.prepare("SELECT name, handle, publication, bio FROM people WHERE user_id = ?").bind(id).first<{ name: string | null; handle: string | null; publication: string | null; bio: string | null }>();
+  if (!p) return c.json({ error: "Persona non trovata" }, 404);
+  const last = await c.env.DB.prepare("SELECT body, note_body FROM activity WHERE author_id = ? ORDER BY date DESC LIMIT 1").bind(id).first<{ body: string; note_body: string | null }>();
+  const facts = [
+    p.publication ? `Writes the publication "${p.publication}"` : "",
+    p.bio ? `Their bio: ${p.bio}` : "",
+    last ? `They replied "${last.body.slice(0, 300)}" to the writer's Note "${(last.note_body ?? "").slice(0, 200)}"` : "",
+  ].filter(Boolean);
+  return c.json({ message: await personalMessage(key, await voice(c.env), kind, { name: p.name ?? p.handle ?? "", facts }) });
 });
 
 app.delete("/api/people/:id", async (c) => {

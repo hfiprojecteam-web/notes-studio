@@ -175,3 +175,22 @@ export async function analyzeVoice(apiKey: string, texts: string[], language: st
   ].join("\n\n");
   return (await askList(apiKey, "You are an editor with a precise ear for prose style.", user))[0] ?? "";
 }
+
+const MESSAGE_KINDS = {
+  benvenuto: "a short welcome to someone who recently subscribed or started following",
+  grazie: "a short thank-you to someone who replied to, liked or restacked the writer's work",
+  domanda: "a short message asking one genuine question to understand what this person is working on or struggling with",
+  invito: "a short, low-pressure invitation to look at the writer's paid subscription or offer, with one concrete reason it may fit this person",
+} as const;
+export type MessageKind = keyof typeof MESSAGE_KINDS;
+export const isMessageKind = (k: unknown): k is MessageKind => typeof k === "string" && k in MESSAGE_KINDS;
+
+/** A first draft of a one-to-one message. The writer edits and sends it personally; nothing is sent from here. */
+export async function personalMessage(apiKey: string, v: Voice, kind: MessageKind, person: { name: string; facts: string[] }) {
+  const user = [
+    ...voiceBlock(v),
+    `<person name="${person.name}">\n${person.facts.map((f) => `- ${f}`).join("\n")}\n</person>`,
+    `Draft ${MESSAGE_KINDS[kind]}, from the writer to this person. Address them by first name. Use only the facts listed above, and mention at most one of them, the way a person who actually noticed would. No flattery, no sales language, no invented details, three sentences at most. Return exactly one item.`,
+  ].join("\n\n");
+  return (await askList(apiKey, WRITER, user))[0] ?? "";
+}

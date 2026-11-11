@@ -809,38 +809,85 @@ views.activity = async (v) => {
 };
 
 // ---------- Persone ----------
-let peopleFilter = "";
+let peopleTab = "circle", peopleFilter = "";
+const SUB_LABEL = { paid: "Tuo abbonato a pagamento", free: "Tuo iscritto", none: "Non iscritto" };
 views.people = async (v) => {
   const d = await api("/people");
-  const list = d.people.filter((p) => !peopleFilter || p.tag === peopleFilter);
+  const circle = d.people.filter((p) => p.circle), suggested = d.people.filter((p) => p.suggested).sort((a, b) => b.score - a.score);
+  const base = peopleTab === "circle" ? circle : peopleTab === "suggested" ? suggested : d.people;
+  const list = base.filter((p) => !peopleFilter || p.tag === peopleFilter);
   // Substack marks free sign-ups as "free_signup"; "subscribed" is a paying subscription.
   const stateLabel = (x) => x.founding ? "fondatore" : x.state === "subscribed" ? "a pagamento" : x.state === "free_signup" ? "" : x.state.replace(/_/g, " ");
   const row = (p, i) => `<div class="item person" data-id="${p.user_id}" style="--i:${Math.min(i, 14)}">
-      ${p.photo_url ? `<img class="avatar" src="${esc(p.photo_url)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="avatar">${esc((p.name || "?")[0])}</span>`}
-      <div><b style="font-weight:600" data-nt>${esc(p.name || p.handle || "Senza nome")}</b>${p.handle ? ` <a class="meta" data-nt href="https://substack.com/@${esc(p.handle)}" target="_blank" rel="noopener">@${esc(p.handle)}</a>` : ""}
+      ${p.photo_url ? `<img class="avatar" src="${esc(p.photo_url)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="avatar" data-nt>${esc((p.name || "?")[0])}</span>`}
+      <div><b style="font-weight:600" data-nt>${esc(p.name || p.handle || "?")}</b>${p.handle ? ` <a class="meta" data-nt href="https://substack.com/@${esc(p.handle)}" target="_blank" rel="noopener">@${esc(p.handle)}</a>` : ""}
         <div class="meta">${p.publication ? nt(p.publication) : "Nessuna pubblicazione"}</div>
-        <div class="row meta mono" style="margin-top:6px;gap:12px">${p.followers != null ? `<span>${p.followers} follower</span>` : ""}${p.subscribers ? `<span>${esc(p.subscribers)} iscritti</span>` : ""}</div>
-        <div class="row" style="margin-top:6px">${p.interactions ? `<span class="tag">${p.interactions} ${p.interactions === 1 ? "risposta" : "risposte"}</span>` : ""}${p.waiting ? `<span class="tag ok">${p.waiting} in attesa</span>` : ""}${p.last_interaction ? `<span class="meta">ultima ${F(p.last_interaction, { day: "numeric", month: "short" })}</span>` : ""}</div></div>
-      <div><h2 style="margin-bottom:6px">Iscritto a${p.subscriptions ? ` <span class="mono">${p.subscriptions.length}${p.subs_truncated ? "+" : ""}</span>` : ""}</h2>
+        <div class="row meta mono" style="margin-top:6px;gap:12px">${p.followers != null ? `<span>${p.followers} follower</span>` : ""}${p.subscribers ? `<span><span data-nt>${esc(p.subscribers)}</span> <span>iscritti</span></span>` : ""}</div>
+        <div class="row" style="margin-top:6px">${p.sub_state && p.sub_state !== "none" ? `<span class="tag ok">${SUB_LABEL[p.sub_state]}</span>` : ""}${p.waiting ? `<span class="tag ok">${p.waiting} in attesa</span>` : ""}${p.tag ? `<span class="tag">${p.tag}</span>` : ""}</div></div>
+      <div>${peopleTab === "suggested" ? `<h2 style="margin-bottom:6px">Perché te la suggerisco</h2><div class="subs">${p.reasons.map((r) => `<span class="tag">${r}</span>`).join("")}</div>`
+        : p.circle && (p.next_step || p.last_contact || p.note) ? `<h2 style="margin-bottom:6px">Prossimo passo</h2><div>${p.next_step ? nt(p.next_step) : '<span class="meta">Nessuno</span>'}${p.next_date ? ` <span class="meta">${F(p.next_date, { day: "numeric", month: "short" })}</span>` : ""}</div>${p.last_contact ? `<div class="meta" style="margin-top:4px"><span>Ultimo contatto</span> ${F(p.last_contact, { day: "numeric", month: "short" })}</div>` : ""}`
+        : `<h2 style="margin-bottom:6px">Iscritto a${p.subscriptions ? ` <span class="mono">${p.subscriptions.length}${p.subs_truncated ? "+" : ""}</span>` : ""}</h2>
         ${p.subscriptions == null ? `<span class="meta">${p.handle ? "Non ancora letto: si aggiorna alla prossima sincronizzazione." : "Profilo non ancora identificato: ci riprova alla prossima sincronizzazione."}</span>`
-          : p.subscriptions.length ? `<div class="subs">${p.subscriptions.slice(0, 14).map((x) => `<span class="tag ${stateLabel(x) ? "ok" : ""}" title="${esc(x.state)}" data-nt>${esc(x.name)}${stateLabel(x) ? " · " + esc(tr(stateLabel(x))) : ""}</span>`).join("")}${p.subscriptions.length > 14 ? `<span class="meta">e altre ${p.subscriptions.length - 14}</span>` : ""}</div>`
-          : '<span class="meta">Nessun abbonamento pubblico.</span>'}</div>
-      <div class="row"><select class="auto" data-tag aria-label="Etichetta"><option value="">Senza etichetta</option>${d.tags.map((t) => `<option ${p.tag === t ? "selected" : ""}>${t}</option>`).join("")}</select>
-        <button class="quiet danger" data-del title="Rimuovi">${icon("x")}</button></div></div>`;
+          : p.subscriptions.length ? `<div class="subs">${p.subscriptions.slice(0, 10).map((x) => `<span class="tag ${stateLabel(x) ? "ok" : ""}" title="${esc(x.state)}" data-nt>${esc(x.name)}${stateLabel(x) ? " · " + esc(tr(stateLabel(x))) : ""}</span>`).join("")}${p.subscriptions.length > 10 ? `<span class="meta">e altre ${p.subscriptions.length - 10}</span>` : ""}</div>`
+          : '<span class="meta">Nessun abbonamento pubblico.</span>'}`}</div>
+      <div class="row">${p.circle ? `<button class="ghost" data-open>${icon("pen")}Scheda</button>` : `<button class="${peopleTab === "suggested" ? "btn" : "ghost"}" data-circle>${icon("plus")}Nella cerchia</button>`}
+        ${peopleTab === "suggested" ? `<button class="quiet" data-dismiss>Ignora</button>` : `<button class="quiet danger" data-del title="Rimuovi">${icon("x")}</button>`}</div></div>`;
+  const empties = { circle: ["La tua cerchia è vuota", "Sono le persone che scegli di seguire da vicino. Aggiungile dai Suggeriti, da Tutti, o cercando un profilo con il campo in alto."],
+    suggested: ["Nessun suggerimento per ora", "Qui compaiono le persone che ti rispondono, che risultano iscritte alla tua pubblicazione o che pagano già altre newsletter. I profili si leggono una volta al giorno."],
+    all: ["Ancora nessuno", "Qui compare chi risponde alle tue Notes. Puoi anche cercare qualsiasi profilo Substack con il campo in alto."] };
   v.innerHTML = `
-    <div class="head"><div><h1>Persone</h1><p class="lede">Chi risponde alle tue Notes e chi vuoi tenere d'occhio: quanto pubblico ha, cosa pubblica e a quali newsletter è iscritto pubblicamente. In cima chi aspetta una tua risposta.</p></div>
+    <div class="head"><div><h1>Persone</h1><p class="lede">La cerchia di chi segui da vicino, e i suggerimenti su chi aggiungere. I messaggi li scrivi e li invii tu: l'app prepara, ricorda e tiene il registro.</p></div>
       <div class="row"><input id="pHandle" class="grow" placeholder="@handle o link al profilo" style="min-width:170px"><button class="btn" id="pAdd">${icon("plus")}Cerca e aggiungi</button></div></div>
-    <div class="tabs" style="margin-bottom:18px"><button data-pf="" class="${peopleFilter ? "" : "on"}">Tutti <span class="mono">${d.people.length}</span></button>${d.tags.map((t) => `<button data-pf="${t}" class="${peopleFilter === t ? "on" : ""}">${t}</button>`).join("")}</div>
+    <div class="row" style="margin-bottom:18px;gap:12px"><div class="tabs"><button data-pt="circle" class="${peopleTab === "circle" ? "on" : ""}">Cerchia <span class="mono">${circle.length}</span></button><button data-pt="suggested" class="${peopleTab === "suggested" ? "on" : ""}">Suggeriti <span class="mono">${suggested.length}</span></button><button data-pt="all" class="${peopleTab === "all" ? "on" : ""}">Tutti <span class="mono">${d.people.length}</span></button></div>
+      <select id="pTag" class="auto"><option value="">Tutte le etichette</option>${d.tags.map((t) => `<option ${peopleFilter === t ? "selected" : ""}>${t}</option>`).join("")}</select></div>
     <div class="list">${list.map(row).join("")}</div>
-    ${list.length ? "" : empty(peopleFilter ? "Nessuno con questa etichetta" : "Ancora nessuno", "Qui compare chi risponde alle tue Notes. Puoi anche cercare qualsiasi profilo Substack con il campo in alto: vedrai il suo pubblico e i suoi abbonamenti pubblici.")}
-    <p class="meta" style="margin-top:16px;max-width:70ch">Substack mostra solo gli abbonamenti che ciascuno ha scelto di tenere pubblici, e il numero di iscritti solo arrotondato. In verde gli abbonamenti a pagamento.</p>`;
-  $("#pAdd").onclick = (e) => act(e.currentTarget, async () => { const r = await api("/people", "POST", { handle: $("#pHandle").value }); toast(tr("Aggiunto") + " " + (r.name || "")); render(); });
+    ${list.length ? "" : empty(...(peopleFilter ? ["Nessuno con questa etichetta", "Cambia etichetta o scheda."] : empties[peopleTab]))}
+    <p class="meta" style="margin-top:16px;max-width:70ch">Che qualcuno sia tuo iscritto lo leggo dai suoi abbonamenti pubblici: chi li tiene privati non risulta, e puoi segnarlo a mano nella scheda. Il numero di iscritti di ciascuno è arrotondato da Substack.</p>`;
+  $("#pAdd").onclick = (e) => act(e.currentTarget, async () => { const r = await api("/people", "POST", { handle: $("#pHandle").value }); toast(tr("Aggiunto") + " " + (r.name || "")); peopleTab = "circle"; render(); });
+  $("#pTag").onchange = (e) => { peopleFilter = e.target.value; render(); };
   v.onclick = (e) => {
-    const f = e.target.closest("[data-pf]"); if (f) { peopleFilter = f.dataset.pf; return render(); }
-    const del = e.target.closest("[data-del]"); if (del) act(del, async () => { await api("/people/" + del.closest(".person").dataset.id, "DELETE"); render(); });
+    const t = e.target.closest("[data-pt]"); if (t) { peopleTab = t.dataset.pt; return render(); }
+    const el = e.target.closest(".person"); if (!el) return; const id = el.dataset.id, b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.del !== undefined) act(b, async () => { if (!confirm("Rimuovere questa persona e i suoi dati dall'app?")) return; await api("/people/" + id, "DELETE"); render(); });
+    if (b.dataset.circle !== undefined) act(b, async () => { await api("/people/" + id, "PUT", { circle: true }); toast("Aggiunta alla cerchia"); render(); });
+    if (b.dataset.dismiss !== undefined) act(b, async () => { await api("/people/" + id, "PUT", { dismissed: true }); render(); });
+    if (b.dataset.open !== undefined) openPerson(d.people.find((p) => p.user_id == id), d.tags);
   };
-  v.onchange = (e) => { if (e.target.matches("[data-tag]")) act(null, async () => { await api("/people/" + e.target.closest(".person").dataset.id, "PUT", { tag: e.target.value || null }); toast("Etichetta salvata"); }); };
 };
+
+// One person's card: status, notes, next step, a message to adapt and the log of what was sent.
+async function openPerson(p, tags) {
+  const d = $("#editor"); const log = await api(`/people/${p.user_id}/contacts`);
+  const KINDS = { benvenuto: "Benvenuto", grazie: "Ringraziamento", domanda: "Domanda per conoscerlo", invito: "Invito all'offerta" };
+  const dateIn = (ms) => ms ? new Date(ms - new Date(ms).getTimezoneOffset() * 60000).toISOString().slice(0, 10) : "";
+  d.innerHTML = `<form method="dialog" class="dlg">
+    <div class="row"><h1 style="font-size:18px" class="grow" data-nt>${esc(p.name || p.handle || "?")}</h1><button class="quiet" value="close" title="Chiudi">${icon("x")}</button></div>
+    ${p.reasons.length ? `<div class="subs">${p.reasons.map((r) => `<span class="tag">${r}</span>`).join("")}</div>` : ""}
+    <div class="cols">
+      <div class="field" style="margin:0"><label for="cSub">Rapporto con te</label><select id="cSub"><option value="">Come risulta dal profilo pubblico</option>${Object.entries(SUB_LABEL).map(([k, l]) => `<option value="${k}" ${p.sub_manual === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+      <div class="field" style="margin:0"><label for="cTag">Etichetta</label><select id="cTag"><option value="">Senza etichetta</option>${tags.map((t) => `<option ${p.tag === t ? "selected" : ""}>${t}</option>`).join("")}</select></div>
+      <div class="field" style="margin:0"><label for="cNext">Prossimo passo</label><input id="cNext" value="${esc(p.next_step || "")}" placeholder="Per esempio: chiedere cosa sta scrivendo"></div>
+      <div class="field" style="margin:0"><label for="cDate">Quando</label><input id="cDate" type="date" value="${dateIn(p.next_date)}"></div>
+    </div>
+    <div class="field" style="margin:0"><label for="cNote">Appunti</label><textarea id="cNote" style="min-height:70px" placeholder="Cosa sai di questa persona, cosa le interessa">${esc(p.note || "")}</textarea></div>
+    <div class="field" style="margin:0"><label for="cMsg">Messaggio da inviare tu</label>
+      <div class="row"><select id="cKind" class="auto">${Object.entries(KINDS).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
+        ${settings.ai_drafts ? `<button type="button" class="ghost" id="cDraft">${icon("wand")}Proponi una traccia</button>` : ""}<span class="grow"></span><button type="button" class="quiet" id="cCopy">Copia</button></div>
+      <textarea id="cMsg" style="min-height:90px" placeholder="Scrivi qui il messaggio, poi copialo e invialo da Substack"></textarea>
+      <span class="help">L'app non invia nulla. Dopo averlo spedito, registralo qui sotto.</span></div>
+    <div class="row"><input id="cOutcome" class="grow" placeholder="Com'è andata (facoltativo)"><button type="button" class="ghost" id="cLog">${icon("check")}Registra contatto</button></div>
+    ${log.length ? `<div class="list" style="max-height:170px;overflow:auto">${log.map((k) => `<div class="item" style="padding:9px 2px"><div class="meta">${F(k.date, { day: "numeric", month: "short", year: "numeric" })}${k.kind ? ` · <span>${KINDS[k.kind] || esc(k.kind)}</span>` : ""}</div>${k.text ? `<div class="body clamp">${esc(k.text)}</div>` : ""}${k.outcome ? `<div class="meta" data-nt>${esc(k.outcome)}</div>` : ""}</div>`).join("")}</div>` : ""}
+    <div class="row"><button type="button" class="quiet danger" id="cOut">Togli dalla cerchia</button><span class="grow"></span><button class="ghost" value="close">Annulla</button><button type="button" class="btn" id="cSave">${icon("check")}Salva</button></div>
+  </form>`;
+  const id = p.user_id, close = () => { d.close(); render(); };
+  const save = () => api("/people/" + id, "PUT", { sub_manual: $("#cSub", d).value || null, tag: $("#cTag", d).value || null, next_step: $("#cNext", d).value, next_date: $("#cDate", d).value ? new Date($("#cDate", d).value + "T12:00").getTime() : null, note: $("#cNote", d).value });
+  $("#cSave", d).onclick = (e) => act(e.currentTarget, async () => { await save(); toast("Scheda salvata"); close(); });
+  $("#cOut", d).onclick = (e) => act(e.currentTarget, async () => { await api("/people/" + id, "PUT", { circle: false }); close(); });
+  $("#cCopy", d).onclick = async () => { try { await navigator.clipboard.writeText($("#cMsg", d).value); toast("Messaggio copiato"); } catch { toast("Copia non riuscita: seleziona il testo a mano"); } };
+  if ($("#cDraft", d)) $("#cDraft", d).onclick = (e) => act(e.currentTarget, async () => { $("#cMsg", d).placeholder = "Sto pensando…"; try { $("#cMsg", d).value = (await api(`/people/${id}/message`, "POST", { kind: $("#cKind", d).value })).message; } finally { $("#cMsg", d).placeholder = "Scrivi qui il messaggio, poi copialo e invialo da Substack"; } });
+  $("#cLog", d).onclick = (e) => act(e.currentTarget, async () => { await save(); await api(`/people/${id}/contacts`, "POST", { kind: $("#cKind", d).value, text: $("#cMsg", d).value, outcome: $("#cOutcome", d).value }); toast("Contatto registrato"); d.close(); await render(); });
+  d.showModal();
+}
 
 // ---------- Feed (follows + inspirations) ----------
 let feedTab = "follows";

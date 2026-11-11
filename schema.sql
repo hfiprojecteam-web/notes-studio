@@ -88,7 +88,23 @@ CREATE TABLE IF NOT EXISTS people (
   subs_truncated INTEGER DEFAULT 0,
   tag TEXT,                      -- lettore | creator | imprenditore | competitor | coopetitor
   refreshed_at INTEGER,
-  added_at INTEGER NOT NULL
+  added_at INTEGER NOT NULL,
+  circle INTEGER NOT NULL DEFAULT 0,     -- 1 = I chose to follow this person closely
+  dismissed INTEGER NOT NULL DEFAULT 0,  -- 1 = do not suggest again
+  sub_manual TEXT,                       -- paid | free | none, set by hand when the public profile does not tell
+  note TEXT,
+  next_step TEXT,
+  next_date INTEGER
+);
+
+-- What I wrote to someone (by hand, outside the app) and how it went
+CREATE TABLE IF NOT EXISTS contacts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  date INTEGER NOT NULL,
+  kind TEXT,
+  text TEXT,
+  outcome TEXT
 );
 
 -- One row per day with my own numbers

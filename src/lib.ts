@@ -75,6 +75,12 @@ export interface Settings {
   last_sync_error: string;
   cookie_ok: string; // "1" | "0" | "" (unknown)
   cookie_checked_at: string;
+  paused: string; // "1" stops every automatic action
+  ai_drafts: string; // "1" allows Claude to write drafts
+  next_own_sync: string;
+  next_others_sync: string;
+  last_others_sync: string;
+  last_manual_sync: string;
 }
 
 const DEFAULTS: Settings = {
@@ -89,6 +95,12 @@ const DEFAULTS: Settings = {
   last_sync_error: "",
   cookie_ok: "",
   cookie_checked_at: "",
+  paused: "",
+  ai_drafts: "",
+  next_own_sync: "",
+  next_others_sync: "",
+  last_others_sync: "",
+  last_manual_sync: "",
 };
 
 export async function getSettings(env: Env): Promise<Settings> {

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { Env, encrypt, getSettings, getSid, localParts, zonedToUtc, makeSession, nextSlots, passwordMatches, sessionValid, setSetting } from "./lib";
-import { checkCookie, personUpdate, publishDue, publishOne, sync } from "./jobs";
+import { checkCookie, personUpdate, publishOne, sync, tick } from "./jobs";
 import { EMPTY_PROFILE, Voice, VoiceProfile, analyzeVoice, composeVoice, generateNotes, isRewriteMode, remixInspiration, rewriteNote, suggestReply } from "./generate";
 import * as substack from "./substack";
 import page from "../public/index.html";
@@ -55,11 +55,15 @@ app.get("/api/settings", async (c) => {
     last_sync_error: s.last_sync_error,
     cookie_ok: s.cookie_ok === "" ? null : s.cookie_ok === "1",
     cookie_checked_at: s.cookie_checked_at ? Number(s.cookie_checked_at) : null,
+    paused: s.paused === "1",
+    ai_drafts: s.ai_drafts === "1",
+    next_others_sync: s.next_others_sync ? Number(s.next_others_sync) : null,
+    last_others_sync: s.last_others_sync ? Number(s.last_others_sync) : null,
   });
 });
 
 app.put("/api/settings", async (c) => {
-  const b = await c.req.json<{ handle?: string; timezone?: string; slots?: string[]; cookie?: string }>();
+  const b = await c.req.json<{ handle?: string; timezone?: string; slots?: string[]; cookie?: string; paused?: boolean; ai_drafts?: boolean }>();
   if (b.handle !== undefined) {
     const handle = b.handle.trim().replace(/^@/, "");
     if (handle) {
@@ -80,6 +84,8 @@ app.put("/api/settings", async (c) => {
     const slots = [...new Set(b.slots.map((s) => s.trim()).filter((s) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s)))].sort();
     await setSetting(c.env, "slots", JSON.stringify(slots));
   }
+  if (b.paused !== undefined) await setSetting(c.env, "paused", b.paused ? "1" : "");
+  if (b.ai_drafts !== undefined) await setSetting(c.env, "ai_drafts", b.ai_drafts ? "1" : "");
   if (b.cookie) {
     // Accept either the bare value or a pasted "substack.sid=..." pair.
     const sid = b.cookie.trim().replace(/^substack\.sid=/, "").split(";")[0];
@@ -260,7 +266,7 @@ app.put("/api/voice", async (c) => {
 });
 
 app.post("/api/voice/analyze", async (c) => {
-  const key = claudeKey(c.env);
+  const key = await claudeKey(c.env);
   const profile = readProfile(await getSettings(c.env));
   const notes = await c.env.DB.prepare("SELECT body FROM my_notes WHERE length(body) > 40 ORDER BY likes + restacks * 2 DESC LIMIT 25").all<{ body: string }>();
   const texts = [...profile.samples, ...notes.results.map((r) => r.body)];
@@ -268,7 +274,9 @@ app.post("/api/voice/analyze", async (c) => {
   return c.json({ portrait: await analyzeVoice(key, texts, profile.language) });
 });
 
-function claudeKey(env: Env) {
+/** Draft writing is off unless the owner switched it on in the settings. */
+async function claudeKey(env: Env) {
+  if ((await getSettings(env)).ai_drafts !== "1") throw new Error("La scrittura di bozze con Claude è disattivata (Impostazioni)");
   if (!env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY non configurata su Cloudflare");
   return env.ANTHROPIC_API_KEY;
 }
@@ -282,7 +290,7 @@ async function saveDrafts(env: Env, bodies: string[]) {
 }
 
 app.post("/api/generate", async (c) => {
-  const key = claudeKey(c.env);
+  const key = await claudeKey(c.env);
   const b = await c.req.json<{ count?: number; topic?: string; source_text?: string; source_url?: string; dry?: boolean }>();
   const count = Math.min(Math.max(Number(b.count) || 5, 1), 20);
   let sourceText = b.source_text?.trim();
@@ -301,7 +309,7 @@ app.post("/api/generate", async (c) => {
 
 /** Returns alternative versions of a draft. Nothing is saved: the writer picks one. */
 app.post("/api/rewrite", async (c) => {
-  const key = claudeKey(c.env);
+  const key = await claudeKey(c.env);
   const b = await c.req.json<{ body?: string; mode?: string }>();
   if (!b.body?.trim()) return c.json({ error: "Testo vuoto" }, 400);
   if (!isRewriteMode(b.mode)) return c.json({ error: "Modalità non valida" }, 400);
@@ -332,7 +340,7 @@ app.delete("/api/inspirations/:id", async (c) => {
 });
 
 app.post("/api/inspirations/:id/remix", async (c) => {
-  const key = claudeKey(c.env);
+  const key = await claudeKey(c.env);
   const n = await c.env.DB.prepare("SELECT handle, name, body FROM inspirations WHERE substack_id = ?")
     .bind(c.req.param("id"))
     .first<{ handle: string; name: string | null; body: string }>();
@@ -406,7 +414,12 @@ app.get("/api/stats", async (c) => {
 
 app.post("/api/sync", async (c) => {
   const deep = c.req.query("deep") === "1";
-  return c.json(await sync(c.env, { deep }));
+  const s = await getSettings(c.env);
+  const wait = 15 * 60_000 - (Date.now() - Number(s.last_manual_sync || 0));
+  if (wait > 0) return c.json({ error: `Hai appena sincronizzato: riprova tra ${Math.ceil(wait / 60_000)} minuti` }, 429);
+  await setSetting(c.env, "last_manual_sync", String(Date.now()));
+  // A manual run refreshes my own numbers only; other people's content follows its daily schedule.
+  return c.json(await sync(c.env, { deep, others: c.req.query("others") === "1" }));
 });
 
 // ---------- activity ----------
@@ -422,7 +435,7 @@ app.post("/api/activity/:id/done", async (c) => {
 });
 
 app.post("/api/activity/:id/suggest", async (c) => {
-  const key = claudeKey(c.env);
+  const key = await claudeKey(c.env);
   const a = await c.env.DB.prepare("SELECT note_body, author_name, author_handle, body FROM activity WHERE reply_id = ?")
     .bind(c.req.param("id"))
     .first<{ note_body: string | null; author_name: string | null; author_handle: string | null; body: string }>();
@@ -490,6 +503,34 @@ app.delete("/api/follows/:handle", async (c) => {
     c.env.DB.prepare("DELETE FROM follows WHERE handle = ?").bind(h),
     c.env.DB.prepare("DELETE FROM feed_items WHERE handle = ?").bind(h),
   ]);
+  return c.json({ ok: true });
+});
+
+// ---------- research materials (read-only library) ----------
+
+app.get("/api/materials", async (c) => {
+  return c.json((await c.env.DB.prepare("SELECT id, title, source, length(body) AS size, created_at FROM materials ORDER BY created_at DESC").all()).results);
+});
+
+app.get("/api/materials/:id", async (c) => {
+  const m = await c.env.DB.prepare("SELECT * FROM materials WHERE id = ?").bind(Number(c.req.param("id"))).first();
+  return m ? c.json(m) : c.json({ error: "Materiale non trovato" }, 404);
+});
+
+app.post("/api/materials", async (c) => {
+  const b = await c.req.json<{ title?: string; body?: string; source?: string }>();
+  const body = (b.body ?? "").trim();
+  if (!body) return c.json({ error: "Testo vuoto" }, 400);
+  if (body.length > 400_000) return c.json({ error: "Testo troppo lungo (massimo 400.000 caratteri)" }, 400);
+  const title = (b.title ?? "").trim().slice(0, 200) || body.split("\n")[0].replace(/^#+\s*/, "").slice(0, 120) || "Senza titolo";
+  const r = await c.env.DB.prepare("INSERT INTO materials (title, body, source, created_at) VALUES (?,?,?,?)")
+    .bind(title, body, (b.source ?? "").trim().slice(0, 200), Date.now())
+    .run();
+  return c.json({ ok: true, id: r.meta.last_row_id });
+});
+
+app.delete("/api/materials/:id", async (c) => {
+  await c.env.DB.prepare("DELETE FROM materials WHERE id = ?").bind(Number(c.req.param("id"))).run();
   return c.json({ ok: true });
 });
 
@@ -580,16 +621,7 @@ export default {
     ctx.waitUntil(
       (async () => {
         if (env.SUBSTACK_API_BASE) substack.setBase(env.SUBSTACK_API_BASE);
-        await publishDue(env);
-        // Refresh metrics, feed and replies every 30 minutes.
-        if (new Date(event.scheduledTime).getUTCMinutes() % 30 === 0) {
-          try {
-            await checkCookie(env);
-            await sync(env);
-          } catch (e) {
-            await setSetting(env, "last_sync_error", e instanceof Error ? e.message : String(e));
-          }
-        }
+        await tick(env);
       })(),
     );
   },

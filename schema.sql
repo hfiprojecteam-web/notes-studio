@@ -97,3 +97,12 @@ CREATE TABLE IF NOT EXISTS snapshots (
   restacks INTEGER,
   replies INTEGER
 );
+
+-- Research documents written elsewhere, kept here to be read while working
+CREATE TABLE IF NOT EXISTS materials (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  source TEXT,
+  created_at INTEGER NOT NULL
+);

@@ -1,4 +1,4 @@
-import { Env, getSettings, getSid, localParts, setSetting } from "./lib";
+import { Env, getSettings, getSid, localParts, setSetting, zonedToUtc } from "./lib";
 import * as substack from "./substack";
 
 /** Publishes one queued note. Marks it `publishing` first so two runs can never post it twice. */
@@ -27,15 +27,23 @@ export async function publishOne(env: Env, id: number): Promise<{ ok: boolean; e
 
 export async function publishDue(env: Env) {
   const { results } = await env.DB.prepare(
-    "SELECT id FROM notes WHERE status = 'scheduled' AND scheduled_at <= ? ORDER BY scheduled_at LIMIT 3",
+    // Each note goes out up to 6 minutes after its slot (a fixed offset per note), never on the exact minute.
+    "SELECT id FROM notes WHERE status = 'scheduled' AND scheduled_at + (id % 7) * 60000 <= ? ORDER BY scheduled_at LIMIT 2",
   )
     .bind(Date.now())
     .all<{ id: number }>();
   for (const r of results) await publishOne(env, r.id);
 }
 
-/** Pulls my notes + metrics, the notes of followed creators, and unanswered replies. */
-export async function sync(env: Env, opts: { deep?: boolean } = {}) {
+/** A short random pause, so a run does not hit Substack with a burst of evenly spaced requests. */
+const nap = (minMs: number, maxMs: number) => new Promise((r) => setTimeout(r, minMs + Math.random() * (maxMs - minMs)));
+
+/**
+ * Pulls my own notes and numbers. With `others`, also reads other people's content
+ * (replies to my notes, followed creators, people profiles): that part runs once a day.
+ */
+export async function sync(env: Env, opts: { deep?: boolean; others?: boolean } = {}) {
+  const others = opts.others ?? false;
   const s = await getSettings(env);
   if (!s.user_id) throw new Error("Imposta prima il tuo handle Substack nelle Impostazioni");
   const me = Number(s.user_id);
@@ -56,8 +64,9 @@ export async function sync(env: Env, opts: { deep?: boolean } = {}) {
   }
 
   // 2. Replies to my recent notes that I have not answered
-  const recent = mine.filter((n) => n.replies > 0 && now - n.date < 14 * 86400_000).slice(0, 12);
+  const recent = others ? mine.filter((n) => n.replies > 0 && now - n.date < 14 * 86400_000).slice(0, 12) : [];
   for (const n of recent) {
+    await nap(800, 2600);
     const replies = await substack.getReplies(n.id, sid);
     for (const r of replies) {
       if (r.userId === me) continue;
@@ -88,9 +97,12 @@ export async function sync(env: Env, opts: { deep?: boolean } = {}) {
   }
 
   // 3. Latest notes of the creators I follow
-  const follows = await env.DB.prepare("SELECT handle, user_id FROM follows ORDER BY added_at LIMIT 20").all<{ handle: string; user_id: number }>();
+  const follows = others
+    ? await env.DB.prepare("SELECT handle, user_id FROM follows ORDER BY added_at LIMIT 20").all<{ handle: string; user_id: number }>()
+    : { results: [] as { handle: string; user_id: number }[] };
   const errors: string[] = [];
   for (const f of follows.results) {
+    await nap(800, 2600);
     try {
       for (const n of await substack.getUserNotes(f.user_id, 1, sid)) {
         stmts.push(
@@ -124,10 +136,13 @@ export async function sync(env: Env, opts: { deep?: boolean } = {}) {
   }
 
   // People found through replies have no handle yet: resolve a few per run from one of their replies.
-  const nameless = await env.DB.prepare(
+  const nameless = others
+    ? await env.DB.prepare(
     "SELECT p.user_id, MAX(a.reply_id) AS reply_id FROM people p JOIN activity a ON a.author_id = p.user_id WHERE p.handle IS NULL GROUP BY p.user_id LIMIT 4",
-  ).all<{ user_id: number; reply_id: string }>();
+  ).all<{ user_id: number; reply_id: string }>()
+    : { results: [] as { user_id: number; reply_id: string }[] };
   for (const person of nameless.results) {
+    await nap(800, 2600);
     try {
       const handle = await substack.getNoteAuthorHandle(person.reply_id, sid);
       if (handle) stmts.push(env.DB.prepare("UPDATE people SET handle = ? WHERE user_id = ?").bind(handle, person.user_id));
@@ -137,12 +152,15 @@ export async function sync(env: Env, opts: { deep?: boolean } = {}) {
   }
 
   // 5. Refresh a few people profiles per run (audience size and public subscriptions)
-  const stale = await env.DB.prepare(
+  const stale = others
+    ? await env.DB.prepare(
     "SELECT user_id, handle FROM people WHERE handle IS NOT NULL AND (refreshed_at IS NULL OR refreshed_at < ?) ORDER BY refreshed_at IS NOT NULL, refreshed_at LIMIT 5",
   )
     .bind(now - 7 * 86400_000)
-    .all<{ user_id: number; handle: string }>();
+    .all<{ user_id: number; handle: string }>()
+    : { results: [] as { user_id: number; handle: string }[] };
   for (const person of stale.results) {
+    await nap(800, 2600);
     try {
       stmts.push(personUpdate(env, await substack.getFullProfile(person.handle, sid), now));
     } catch {
@@ -152,8 +170,9 @@ export async function sync(env: Env, opts: { deep?: boolean } = {}) {
 
   for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
   await setSetting(env, "last_sync", String(now));
+  if (others) await setSetting(env, "last_others_sync", String(now));
   await setSetting(env, "last_sync_error", errors.join("; "));
-  return { myNotes: mine.length, checkedForReplies: recent.length, follows: follows.results.length, errors };
+  return { myNotes: mine.length, others, checkedForReplies: recent.length, follows: follows.results.length, errors };
 }
 
 /** Records whether the saved session cookie still works. Only a sign-in refusal counts as broken. */
@@ -184,4 +203,32 @@ export function personUpdate(env: Env, p: substack.FullProfile, now: number) {
        followers=excluded.followers, subscribers=excluded.subscribers, publication=excluded.publication, pub_subdomain=excluded.pub_subdomain,
        subscriptions=excluded.subscriptions, subs_truncated=excluded.subs_truncated, refreshed_at=excluded.refreshed_at`,
   ).bind(p.id, p.handle, p.name, p.photoUrl, p.bio, p.followers, p.subscribers, p.pubName, p.pubSubdomain, JSON.stringify(p.subscriptions), p.subscriptionsTruncated ? 1 : 0, now, now);
+}
+
+/**
+ * Decides, minute by minute, what the scheduler should do. Reads of other people's content happen once a day at a
+ * random time between 07:00 and 22:00; my own numbers refresh every 3 to 5 hours. Nothing runs while paused.
+ */
+export async function tick(env: Env) {
+  const s = await getSettings(env);
+  if (s.paused === "1") return;
+  await publishDue(env);
+  if (!s.user_id) return;
+  const now = Date.now();
+  const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a));
+  const dueOthers = !s.next_others_sync || now >= Number(s.next_others_sync);
+  const dueOwn = !s.next_own_sync || now >= Number(s.next_own_sync);
+  if (!dueOthers && !dueOwn) return;
+  // Set the next times first: if this run fails midway, it must not repeat every minute.
+  await setSetting(env, "next_own_sync", String(now + rand(180, 300) * 60_000));
+  if (dueOthers) {
+    const t = localParts(now + 86400_000, s.timezone);
+    await setSetting(env, "next_others_sync", String(zonedToUtc(t.y, t.m, t.d, rand(7, 22), rand(0, 60), s.timezone)));
+  }
+  try {
+    await checkCookie(env);
+    await sync(env, { others: dueOthers });
+  } catch (e) {
+    await setSetting(env, "last_sync_error", e instanceof Error ? e.message : String(e));
+  }
 }

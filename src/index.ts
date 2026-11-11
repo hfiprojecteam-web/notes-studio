@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
-import { Env, encrypt, getSettings, getSid, localParts, makeSession, nextSlots, passwordMatches, sessionValid, setSetting } from "./lib";
-import { publishDue, publishOne, sync } from "./jobs";
-import { generateNotes } from "./generate";
+import { Env, encrypt, getSettings, getSid, localParts, zonedToUtc, makeSession, nextSlots, passwordMatches, sessionValid, setSetting } from "./lib";
+import { checkCookie, publishDue, publishOne, sync } from "./jobs";
+import { Voice, generateNotes, isRewriteMode, remixInspiration, rewriteNote, suggestReply } from "./generate";
 import * as substack from "./substack";
 import page from "../public/index.html";
 
@@ -53,6 +53,8 @@ app.get("/api/settings", async (c) => {
     has_claude_key: !!c.env.ANTHROPIC_API_KEY,
     last_sync: s.last_sync ? Number(s.last_sync) : null,
     last_sync_error: s.last_sync_error,
+    cookie_ok: s.cookie_ok === "" ? null : s.cookie_ok === "1",
+    cookie_checked_at: s.cookie_checked_at ? Number(s.cookie_checked_at) : null,
   });
 });
 
@@ -83,6 +85,7 @@ app.put("/api/settings", async (c) => {
     // Accept either the bare value or a pasted "substack.sid=..." pair.
     const sid = b.cookie.trim().replace(/^substack\.sid=/, "").split(";")[0];
     await setSetting(c.env, "sid_enc", await encrypt(c.env, sid));
+    await checkCookie(c.env);
   }
   return c.json({ ok: true });
 });
@@ -114,6 +117,7 @@ app.get("/api/diagnostics", async (c) => {
     if (s.user_id && String(me.id) !== s.user_id) throw new Error(`Il cookie appartiene a un altro account (${me.handle ?? me.id})`);
     return `Valido per ${me.name ?? me.handle ?? me.id}`;
   });
+  await checkCookie(c.env);
   out.push({ check: "Chiave Claude", ok: !!c.env.ANTHROPIC_API_KEY, detail: c.env.ANTHROPIC_API_KEY ? "Configurata" : "ANTHROPIC_API_KEY non impostata" });
   return c.json(out);
 });
@@ -206,8 +210,33 @@ app.post("/api/notes/:id/publish", async (c) => {
 
 // ---------- generator ----------
 
+/** Voice reference for Claude: the writer's instructions, best-performing notes and latest notes. */
+async function voice(env: Env): Promise<Voice> {
+  const s = await getSettings(env);
+  type Row = { substack_id: string; body: string };
+  const top = await env.DB.prepare("SELECT substack_id, body FROM my_notes WHERE length(body) > 40 ORDER BY likes + restacks * 2 DESC LIMIT 12").all<Row>();
+  const latest = await env.DB.prepare("SELECT substack_id, body FROM my_notes WHERE length(body) > 40 ORDER BY date DESC LIMIT 8").all<Row>();
+  return {
+    voicePrompt: s.voice_prompt,
+    examples: [...new Map([...top.results, ...latest.results].map((r) => [r.substack_id, r.body])).values()],
+  };
+}
+
+function claudeKey(env: Env) {
+  if (!env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY non configurata su Cloudflare");
+  return env.ANTHROPIC_API_KEY;
+}
+
+async function saveDrafts(env: Env, bodies: string[]) {
+  const now = Date.now();
+  if (bodies.length) {
+    await env.DB.batch(bodies.map((body) => env.DB.prepare("INSERT INTO notes (body, status, source, created_at) VALUES (?, 'draft', 'generated', ?)").bind(body, now)));
+  }
+  return bodies.length;
+}
+
 app.post("/api/generate", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: "ANTHROPIC_API_KEY non configurata" }, 400);
+  const key = claudeKey(c.env);
   const b = await c.req.json<{ count?: number; topic?: string; source_text?: string; source_url?: string }>();
   const count = Math.min(Math.max(Number(b.count) || 5, 1), 20);
   let sourceText = b.source_text?.trim();
@@ -218,33 +247,77 @@ app.post("/api/generate", async (c) => {
     sourceTitle = post.title;
   }
   if (!sourceText && !b.topic?.trim()) return c.json({ error: "Indica un'idea, un testo o il link di un post" }, 400);
+  const v = await voice(c.env);
+  const bodies = await generateNotes(key, v, { count, topic: b.topic, sourceText, sourceTitle });
+  return c.json({ ok: true, created: await saveDrafts(c.env, bodies), examples_used: v.examples.length });
+});
 
+/** Returns alternative versions of a draft. Nothing is saved: the writer picks one. */
+app.post("/api/rewrite", async (c) => {
+  const key = claudeKey(c.env);
+  const b = await c.req.json<{ body?: string; mode?: string }>();
+  if (!b.body?.trim()) return c.json({ error: "Testo vuoto" }, 400);
+  if (!isRewriteMode(b.mode)) return c.json({ error: "Modalità non valida" }, 400);
+  return c.json({ variants: await rewriteNote(key, await voice(c.env), b.body.trim(), b.mode) });
+});
+
+// ---------- inspirations ----------
+
+app.get("/api/inspirations", async (c) => {
+  return c.json((await c.env.DB.prepare("SELECT * FROM inspirations ORDER BY saved_at DESC LIMIT 200").all()).results);
+});
+
+app.post("/api/inspirations", async (c) => {
+  const { substack_id } = await c.req.json<{ substack_id: string }>();
+  const n = await c.env.DB.prepare("SELECT f.substack_id, f.handle, f.body, w.name FROM feed_items f LEFT JOIN follows w ON w.handle = f.handle WHERE f.substack_id = ?")
+    .bind(String(substack_id))
+    .first<{ substack_id: string; handle: string; body: string; name: string | null }>();
+  if (!n) return c.json({ error: "Note non trovata nel feed" }, 404);
+  await c.env.DB.prepare("INSERT OR IGNORE INTO inspirations (substack_id, handle, name, body, saved_at) VALUES (?,?,?,?,?)")
+    .bind(n.substack_id, n.handle, n.name, n.body, Date.now())
+    .run();
+  return c.json({ ok: true });
+});
+
+app.delete("/api/inspirations/:id", async (c) => {
+  await c.env.DB.prepare("DELETE FROM inspirations WHERE substack_id = ?").bind(c.req.param("id")).run();
+  return c.json({ ok: true });
+});
+
+app.post("/api/inspirations/:id/remix", async (c) => {
+  const key = claudeKey(c.env);
+  const n = await c.env.DB.prepare("SELECT handle, name, body FROM inspirations WHERE substack_id = ?")
+    .bind(c.req.param("id"))
+    .first<{ handle: string; name: string | null; body: string }>();
+  if (!n) return c.json({ error: "Ispirazione non trovata" }, 404);
+  const bodies = await remixInspiration(key, await voice(c.env), { author: n.name ?? n.handle, body: n.body }, 3);
+  return c.json({ ok: true, created: await saveDrafts(c.env, bodies) });
+});
+
+// ---------- week calendar ----------
+
+/** The 7 days starting today (shifted by `offset` weeks) with the slot times of each, in the writer's timezone. */
+app.get("/api/week", async (c) => {
   const s = await getSettings(c.env);
-  // Voice reference: the best-performing notes plus the most recent ones.
-  const top = await c.env.DB.prepare("SELECT substack_id, body FROM my_notes WHERE length(body) > 40 ORDER BY likes + restacks * 2 DESC LIMIT 12").all<{
-    substack_id: string;
-    body: string;
-  }>();
-  const latest = await c.env.DB.prepare("SELECT substack_id, body FROM my_notes WHERE length(body) > 40 ORDER BY date DESC LIMIT 8").all<{
-    substack_id: string;
-    body: string;
-  }>();
-  const examples = [...new Map([...top.results, ...latest.results].map((r) => [r.substack_id, r.body])).values()];
-
-  const bodies = await generateNotes({
-    apiKey: c.env.ANTHROPIC_API_KEY,
-    count,
-    topic: b.topic,
-    sourceText,
-    sourceTitle,
-    voicePrompt: s.voice_prompt,
-    examples,
-  });
-  const now = Date.now();
-  await c.env.DB.batch(
-    bodies.map((body) => c.env.DB.prepare("INSERT INTO notes (body, status, source, created_at) VALUES (?, 'draft', 'generated', ?)").bind(body, now)),
-  );
-  return c.json({ ok: true, created: bodies.length, examples_used: examples.length });
+  const offset = Math.max(-52, Math.min(52, Number(c.req.query("offset")) || 0));
+  const slots: string[] = JSON.parse(s.slots);
+  const today = localParts(Date.now(), s.timezone);
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(Date.UTC(today.y, today.m - 1, today.d + offset * 7 + i, 12));
+    const [y, m, day] = [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()];
+    const next = new Date(Date.UTC(y, m - 1, day + 1, 12));
+    days.push({
+      key: `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+      start: zonedToUtc(y, m, day, 0, 0, s.timezone),
+      end: zonedToUtc(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), 0, 0, s.timezone),
+      slots: slots.map((label) => {
+        const [h, min] = label.split(":").map(Number);
+        return { label, ts: zonedToUtc(y, m, day, h, min, s.timezone) };
+      }),
+    });
+  }
+  return c.json({ timezone: s.timezone, offset, now: Date.now(), days });
 });
 
 // ---------- stats ----------
@@ -301,6 +374,20 @@ app.post("/api/activity/:id/done", async (c) => {
   return c.json({ ok: true });
 });
 
+app.post("/api/activity/:id/suggest", async (c) => {
+  const key = claudeKey(c.env);
+  const a = await c.env.DB.prepare("SELECT note_body, author_name, author_handle, body FROM activity WHERE reply_id = ?")
+    .bind(c.req.param("id"))
+    .first<{ note_body: string | null; author_name: string | null; author_handle: string | null; body: string }>();
+  if (!a) return c.json({ error: "Risposta non trovata" }, 404);
+  const reply = await suggestReply(key, await voice(c.env), {
+    noteBody: a.note_body ?? "",
+    author: a.author_name ?? a.author_handle ?? "reader",
+    replyBody: a.body,
+  });
+  return c.json({ reply });
+});
+
 app.post("/api/activity/:id/reply", async (c) => {
   const { body } = await c.req.json<{ body: string }>();
   if (!body?.trim()) return c.json({ error: "Risposta vuota" }, 400);
@@ -316,7 +403,7 @@ app.post("/api/activity/:id/reply", async (c) => {
 app.get("/api/follows", async (c) => {
   const follows = await c.env.DB.prepare("SELECT * FROM follows ORDER BY added_at").all();
   const feed = await c.env.DB.prepare(
-    "SELECT f.*, w.name, w.photo_url FROM feed_items f JOIN follows w ON w.handle = f.handle ORDER BY f.date DESC LIMIT 150",
+    "SELECT f.*, w.name, w.photo_url, (SELECT 1 FROM inspirations i WHERE i.substack_id = f.substack_id) AS saved FROM feed_items f JOIN follows w ON w.handle = f.handle ORDER BY f.date DESC LIMIT 150",
   ).all();
   return c.json({ follows: follows.results, feed: feed.results });
 });
@@ -369,6 +456,7 @@ export default {
         // Refresh metrics, feed and replies every 30 minutes.
         if (new Date(event.scheduledTime).getUTCMinutes() % 30 === 0) {
           try {
+            await checkCookie(env);
             await sync(env);
           } catch (e) {
             await setSetting(env, "last_sync_error", e instanceof Error ? e.message : String(e));

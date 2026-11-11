@@ -2,85 +2,265 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Notes Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #f6f4ef; --panel: #fffdf9; --ink: #1d1b16; --muted: #6f6a5f; --line: #e2ddd1;
-    --accent: #c2410c; --accent-ink: #fff; --ok: #166534; --bad: #b91c1c; --chip: #efeae0;
+    --bg: #fafafa; --surface: #ffffff; --sunken: #f4f4f5; --ink: #18181b; --muted: #71717a; --faint: #a1a1aa;
+    --line: #e4e4e7; --accent: #047857; --accent-ink: #ffffff; --accent-soft: #ecfdf5; --accent-line: #a7f3d0;
+    --bad: #b42318; --bad-soft: #fef3f2; --warn: #b54708; --shadow: 0 18px 40px -22px rgba(24, 24, 27, .18);
+    --ease: cubic-bezier(.16, 1, .3, 1);
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #16150f; --panel: #1f1d17; --ink: #ece8dd; --muted: #a29c8e; --line: #36332a;
-      --accent: #f97316; --accent-ink: #1b1206; --ok: #4ade80; --bad: #f87171; --chip: #2a2820; }
+    :root {
+      --bg: #0e0e10; --surface: #17171a; --sunken: #1f1f23; --ink: #f4f4f5; --muted: #a1a1aa; --faint: #71717a;
+      --line: #2a2a2f; --accent: #34d399; --accent-ink: #052e22; --accent-soft: #0c2a20; --accent-line: #14532d;
+      --bad: #f97066; --bad-soft: #2a1513; --warn: #fdb022; --shadow: 0 18px 40px -22px rgba(0, 0, 0, .7);
+    }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { display: flex; align-items: center; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
-  h1 { font: 600 17px/1 ui-serif, Georgia, serif; margin: 0; letter-spacing: .2px; }
-  nav { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
-  nav button { background: none; border: 0; color: var(--muted); padding: 7px 11px; border-radius: 7px; font: inherit; cursor: pointer; }
-  nav button.on { background: var(--chip); color: var(--ink); font-weight: 600; }
-  main { max-width: 860px; margin: 0 auto; padding: 20px 16px 80px; }
-  h2 { font: 600 20px/1.2 ui-serif, Georgia, serif; margin: 0 0 4px; }
-  .sub { color: var(--muted); margin: 0 0 16px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 10px; }
-  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .grow { flex: 1; min-width: 0; }
-  textarea, input, select { width: 100%; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; font: inherit; }
-  textarea { min-height: 96px; resize: vertical; }
-  input[type=datetime-local], input.small, select.small { width: auto; }
-  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
-  button.btn { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 8px 13px; font: 600 14px/1.2 inherit; cursor: pointer; }
-  button.ghost { background: none; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; font: 14px/1.2 inherit; cursor: pointer; }
-  button.link { background: none; border: 0; color: var(--muted); font: 13px inherit; cursor: pointer; padding: 4px 6px; text-decoration: underline; }
-  button:disabled { opacity: .5; cursor: default; }
-  .body { white-space: pre-wrap; overflow-wrap: anywhere; }
-  .meta { font-size: 13px; color: var(--muted); }
-  .chip { display: inline-block; background: var(--chip); border-radius: 99px; padding: 2px 9px; font-size: 12px; }
-  .chip.failed { color: var(--bad); } .chip.published { color: var(--ok); }
-  .err { color: var(--bad); font-size: 13px; }
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 14px; }
-  .stat b { display: block; font: 600 24px/1.2 ui-serif, Georgia, serif; }
-  .bars { display: flex; align-items: flex-end; gap: 3px; height: 110px; }
-  .bars div { flex: 1; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; opacity: .85; }
-  .bars div.empty { background: var(--line); }
-  .axis { display: flex; gap: 3px; font-size: 10px; color: var(--muted); }
-  .axis span { flex: 1; text-align: center; }
-  table { width: 100%; border-collapse: collapse; } td, th { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); font-size: 14px; }
-  #toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 15px; border-radius: 8px; display: none; max-width: 90vw; z-index: 9; }
-  #login { max-width: 340px; margin: 14vh auto; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 Geist, ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .mono { font-family: "Geist Mono", ui-monospace, monospace; font-feature-settings: "tnum"; }
+  svg.i { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
   .hidden { display: none !important; }
-  kbd { background: var(--chip); border-radius: 4px; padding: 1px 5px; font-size: 12px; }
-  .focus { outline: 2px solid var(--accent); }
+
+  /* shell */
+  #app { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 100dvh; }
+  aside { position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; padding: 22px 14px 16px; border-right: 1px solid var(--line); background: var(--surface); }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 22px; font-weight: 600; letter-spacing: -.02em; font-size: 16px; }
+  .mark { width: 26px; height: 26px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; color: var(--accent-ink); }
+  .mark svg { width: 15px; height: 15px; stroke-width: 2; }
+  nav { display: flex; flex-direction: column; gap: 2px; }
+  nav button { display: flex; align-items: center; gap: 11px; width: 100%; padding: 9px 10px; border: 0; border-radius: 9px; background: none; color: var(--muted); font: 500 14.5px/1 inherit; cursor: pointer; transition: background .25s var(--ease), color .25s var(--ease), transform .15s var(--ease); }
+  nav button:hover { color: var(--ink); background: var(--sunken); }
+  nav button.on { color: var(--ink); background: var(--sunken); }
+  nav button.on svg { color: var(--accent); }
+  nav button:active { transform: scale(.98); }
+  nav .badge { margin-left: auto; font-size: 11.5px; padding: 2px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
+  .side-foot { margin-top: auto; display: grid; gap: 10px; }
+  .status { display: flex; align-items: center; gap: 9px; padding: 10px; border: 1px solid var(--line); border-radius: 11px; font-size: 13px; cursor: pointer; background: none; color: var(--ink); text-align: left; width: 100%; font-family: inherit; }
+  .status small { display: block; color: var(--muted); font-size: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+  .dot.ok { background: var(--accent); animation: breathe 2.6s ease-in-out infinite; }
+  .dot.bad { background: var(--bad); } .dot.warn { background: var(--warn); }
+  @keyframes breathe { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); } 50% { box-shadow: 0 0 0 5px transparent; } }
+  main { padding: 34px clamp(18px, 4vw, 52px) 90px; max-width: 1400px; width: 100%; }
+
+  /* type */
+  h1 { font-size: 26px; font-weight: 600; letter-spacing: -.03em; line-height: 1.15; margin: 0; }
+  h2 { font-size: 13px; font-weight: 500; color: var(--muted); margin: 0; letter-spacing: .01em; }
+  .lede { color: var(--muted); margin: 6px 0 0; max-width: 62ch; }
+  .head { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
+  .head > div:first-child { flex: 1; min-width: 240px; }
+  .meta { font-size: 13px; color: var(--muted); }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .grow { flex: 1; min-width: 0; }
+  .sec { display: flex; align-items: center; gap: 10px; margin: 26px 0 10px; }
+  .sec .n { color: var(--faint); }
+
+  /* controls */
+  button { font-family: inherit; }
+  .btn, .ghost, .quiet { display: inline-flex; align-items: center; gap: 7px; border-radius: 9px; padding: 8px 13px; font: 500 14px/1.2 inherit; cursor: pointer; transition: transform .15s var(--ease), background .25s var(--ease), border-color .25s var(--ease), opacity .2s; white-space: nowrap; }
+  .btn { background: var(--accent); color: var(--accent-ink); border: 1px solid transparent; }
+  .ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+  .ghost:hover { border-color: var(--faint); }
+  .quiet { background: none; color: var(--muted); border: 1px solid transparent; padding: 7px 9px; }
+  .quiet:hover { color: var(--ink); background: var(--sunken); }
+  .quiet.danger:hover { color: var(--bad); background: var(--bad-soft); }
+  .btn:active, .ghost:active, .quiet:active { transform: scale(.97); }
+  button:disabled { opacity: .5; cursor: default; }
+  .btn svg, .ghost svg, .quiet svg { width: 16px; height: 16px; }
+  textarea, input, select { width: 100%; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; transition: border-color .2s, box-shadow .2s; }
+  textarea:focus, input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
+  textarea { min-height: 120px; resize: vertical; line-height: 1.55; }
+  .field { display: grid; gap: 7px; margin-bottom: 18px; }
+  .field label { font-size: 13px; font-weight: 500; }
+  .field .help { font-size: 12.5px; color: var(--muted); }
+  .auto { width: auto; }
+
+  /* surfaces */
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+  .pad { padding: 18px; }
+  .list { border-top: 1px solid var(--line); }
+  .item { padding: 14px 2px; border-bottom: 1px solid var(--line); animation: rise .5s var(--ease) both; animation-delay: calc(var(--i, 0) * 45ms); }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+  .body { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .tag { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--sunken); color: var(--muted); }
+  .tag.bad { background: var(--bad-soft); color: var(--bad); }
+  .tag.ok { background: var(--accent-soft); color: var(--accent); }
+  .err { color: var(--bad); font-size: 13px; margin: 6px 0 0; }
+  .empty { padding: 26px 18px; border: 1px dashed var(--line); border-radius: 14px; color: var(--muted); text-align: left; }
+  .empty b { display: block; color: var(--ink); font-weight: 500; margin-bottom: 3px; }
+  .skel { border-radius: 10px; background: linear-gradient(100deg, var(--sunken) 30%, var(--line) 50%, var(--sunken) 70%); background-size: 220% 100%; animation: shimmer 1.3s linear infinite; }
+  @keyframes shimmer { to { background-position: -220% 0; } }
+  .stat-icons { display: flex; gap: 14px; align-items: center; }
+  .stat-icons span { display: inline-flex; align-items: center; gap: 5px; }
+  .stat-icons svg { width: 14px; height: 14px; }
+  a { color: inherit; } a.quiet { text-decoration: none; }
+
+  /* studio */
+  .studio { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 34px; align-items: start; }
+  .composer textarea { border: 0; padding: 4px 2px; min-height: 132px; box-shadow: none !important; background: none; font-size: 16px; }
+  .composer .bar { display: flex; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .draft { display: flex; gap: 10px; align-items: flex-start; padding: 13px 10px; margin: 0 -10px; border-radius: 12px; cursor: pointer; transition: background .2s; border-bottom: 1px solid var(--line); animation: rise .5s var(--ease) both; animation-delay: calc(var(--i, 0) * 45ms); }
+  .draft:hover { background: var(--sunken); }
+  .draft .grip { color: var(--faint); cursor: grab; padding-top: 2px; }
+  .dragging { opacity: .4; }
+  .week { position: sticky; top: 24px; }
+  .week-head { display: flex; align-items: center; gap: 6px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .day { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .day:last-child { border-bottom: 0; }
+  .day.today .dname { color: var(--accent); }
+  .dname { font-size: 12px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; padding-top: 7px; }
+  .dname b { display: block; font-size: 19px; color: var(--ink); letter-spacing: -.02em; font-weight: 600; text-transform: none; }
+  .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .slot { min-height: 62px; border-radius: 11px; padding: 8px 10px; font-size: 13px; line-height: 1.4; transition: background .2s, border-color .2s, transform .2s var(--ease); }
+  .slot .t { font-size: 11.5px; color: var(--muted); display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+  .slot.free { border: 1px dashed var(--line); color: var(--faint); cursor: pointer; background: none; text-align: left; width: 100%; font: inherit; font-size: 13px; }
+  .slot.free:hover { border-color: var(--accent); color: var(--accent); }
+  .slot.past { opacity: .45; pointer-events: none; }
+  .slot.full { background: var(--accent-soft); border: 1px solid var(--accent-line); cursor: grab; }
+  .slot.full .t { color: var(--accent); }
+  .slot.full .x { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .slot.over { border-style: solid; border-color: var(--accent); background: var(--accent-soft); transform: scale(1.02); }
+  .dropzone.over { outline: 2px dashed var(--accent); outline-offset: 6px; border-radius: 12px; }
+
+  /* dialog */
+  dialog { border: 1px solid var(--line); border-radius: 18px; padding: 0; background: var(--surface); color: var(--ink); width: min(680px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); box-shadow: 0 40px 80px -30px rgba(0, 0, 0, .45); }
+  dialog::backdrop { background: rgba(10, 10, 12, .45); backdrop-filter: blur(3px); }
+  dialog[open] { animation: pop .35s var(--ease); }
+  @keyframes pop { from { opacity: 0; transform: translateY(12px) scale(.98); } }
+  .dlg { padding: 20px; display: grid; gap: 14px; }
+  .dlg textarea { min-height: 190px; font-size: 16px; }
+  .variant { border: 1px solid var(--line); border-radius: 12px; padding: 12px; cursor: pointer; transition: border-color .2s, background .2s; animation: rise .45s var(--ease) both; animation-delay: calc(var(--i, 0) * 70ms); }
+  .variant:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+  /* stats */
+  .metrics { display: grid; grid-template-columns: 1.4fr repeat(4, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-bottom: 30px; }
+  .metric { padding: 18px 18px 18px 0; } .metric + .metric { padding-left: 18px; border-left: 1px solid var(--line); }
+  .metric b { display: block; font: 500 30px/1.1 "Geist Mono", monospace; letter-spacing: -.04em; }
+  .metric:first-child b { font-size: 44px; color: var(--accent); }
+  .charts { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 34px; margin-bottom: 30px; }
+  .bars { display: flex; align-items: flex-end; gap: 4px; height: 130px; margin-top: 14px; }
+  .bars div { flex: 1; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 2px; transform-origin: bottom; animation: grow .7s var(--ease) both; animation-delay: calc(var(--i) * 18ms); }
+  .bars div.z { background: var(--line); }
+  @keyframes grow { from { transform: scaleY(0); } }
+  .axis { display: flex; gap: 4px; font-size: 10.5px; color: var(--faint); margin-top: 5px; } .axis span { flex: 1; text-align: center; }
+
+  /* misc */
+  .tabs { display: inline-flex; padding: 3px; background: var(--sunken); border-radius: 11px; gap: 2px; }
+  .tabs button { border: 0; background: none; padding: 7px 14px; border-radius: 8px; font: 500 14px/1 inherit; color: var(--muted); cursor: pointer; transition: all .25s var(--ease); }
+  .tabs button.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
+  .two { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 34px; align-items: start; }
+  .focus { background: var(--sunken); box-shadow: inset 3px 0 0 var(--accent); padding-left: 14px; border-radius: 0 10px 10px 0; }
+  kbd { font: 500 11.5px "Geist Mono", monospace; background: var(--sunken); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+  #toast { position: fixed; bottom: 24px; left: 50%; translate: -50% 0; background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 11px; font-size: 14px; max-width: 90vw; opacity: 0; transform: translateY(10px); transition: all .35s var(--ease); pointer-events: none; z-index: 20; }
+  #toast.show { opacity: 1; transform: none; }
+  #login { min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  #login .l { padding: clamp(28px, 7vw, 96px); display: flex; flex-direction: column; justify-content: center; max-width: 520px; }
+  #login .r { background: var(--sunken); border-left: 1px solid var(--line); display: grid; place-items: center; padding: 40px; }
+  .mock { width: min(360px, 100%); display: grid; gap: 10px; }
+  .mock .slot { animation: float 5s ease-in-out infinite; animation-delay: calc(var(--i) * -1.3s); }
+  @keyframes float { 50% { transform: translateY(-5px); } }
+
+  @media (max-width: 1020px) { .studio, .two, .charts { grid-template-columns: minmax(0, 1fr); } .week { position: static; } }
+  @media (max-width: 820px) {
+    #app { grid-template-columns: minmax(0, 1fr); }
+    aside { position: fixed; inset: auto 0 0 0; height: auto; flex-direction: row; padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid var(--line); z-index: 10; }
+    .brand, .side-foot { display: none; }
+    nav { flex-direction: row; width: 100%; justify-content: space-around; }
+    nav button { flex-direction: column; gap: 4px; font-size: 10.5px; padding: 7px 4px; width: auto; flex: 1; }
+    nav .badge { position: absolute; margin: -4px 0 0 22px; }
+    main { padding: 22px 16px 110px; }
+    #toast { bottom: calc(84px + env(safe-area-inset-bottom)); }
+    .metrics { grid-template-columns: 1fr 1fr; } .metric + .metric { border-left: 0; padding-left: 0; } .metric:first-child { grid-column: 1 / -1; }
+    #login { grid-template-columns: minmax(0, 1fr); } #login .r { display: none; }
+    .day { grid-template-columns: 48px minmax(0, 1fr); padding: 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>
-<div id="login" class="card hidden">
-  <h2>Notes Studio</h2>
-  <p class="sub">Accesso riservato.</p>
-  <form id="loginForm"><input type="password" id="pw" placeholder="Password" autocomplete="current-password" autofocus>
-  <p class="err" id="loginErr"></p><button class="btn">Entra</button></form>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-studio" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9zM18.5 16l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-11.8 7L4 20l1.1-4A8 8 0 1 1 20 12z"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.2"/><path d="M3 19.5c.6-3.2 3-5 6-5s5.400 1.800 6 5M16 5.600a3.200 3.200 0 0 1 0 5.800M17.500 14.800c2 .6 3.200 2.200 3.600 4.700"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.300l2-1.500-2-3.400-2.300 1a7 7 0 0 0-2.200-1.300L14 3h-4l-.4 2.500a7 7 0 0 0-2.200 1.300l-2.300-1-2 3.400 2 1.500A7 7 0 0 0 5 12c0 .4 0 .9.1 1.300l-2 1.500 2 3.400 2.300-1a7 7 0 0 0 2.200 1.300L10 21h4l.4-2.500a7 7 0 0 0 2.200-1.300l2.300 1 2-3.400-2-1.500c.1-.4.1-.9.1-1.300z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><path d="M12 7.500V12l3 2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M20.500 3.500L10 14M20.500 3.500l-6.500 17-4-6.500-6.500-4z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6.500 7l.8 12.500h9.400L17.500 7"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="M14.500 5.500L8 12l6.500 6.500"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="M9.500 5.500L16 12l-6.500 6.500"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7.500-4.500-7.500-10A4.300 4.300 0 0 1 12 7.300 4.300 4.300 0 0 1 19.500 10c0 5.500-7.500 10-7.500 10z"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 3.500l3 3-3 3M20 6.500H8a4 4 0 0 0-4 4v1M7 20.500l-3-3 3-3M4 17.500h12a4 4 0 0 0 4-4v-1"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" stroke-width="2.600"/></symbol>
+  <symbol id="i-wand" viewBox="0 0 24 24"><path d="M5 19L16 8M14 6l4 4M17.500 3v2.500M20.500 6H18M7 4v2M8 5H6"/></symbol>
+  <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6.500 4h11v16.500L12 16.500l-5.500 4z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.500l4.500 4.500L19 7.500"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h9"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l1-4.500L16.500 4l3.500 3.500L8.500 19z"/></symbol>
+</defs></svg>
+
+<div id="login" class="hidden">
+  <div class="l">
+    <div class="brand" style="padding:0 0 28px"><span class="mark"><svg class="i"><use href="#i-pen"/></svg></span>Notes Studio</div>
+    <h1>Scrivi quando vuoi.<br>Esce quando serve.</h1>
+    <p class="lede" style="margin-bottom:26px">Il tuo banco di lavoro privato per le Notes di Substack.</p>
+    <form id="loginForm" class="field" style="max-width:320px">
+      <label for="pw">Password</label>
+      <input type="password" id="pw" autocomplete="current-password" autofocus>
+      <p class="err" id="loginErr"></p>
+      <div><button class="btn">Entra</button></div>
+    </form>
+  </div>
+  <div class="r" aria-hidden="true"><div class="mock">
+    <div class="slot full" style="--i:0"><div class="t mono">09:00</div><div class="x">La costanza batte il talento quando il talento non pubblica.</div></div>
+    <div class="slot free" style="--i:1"><div class="t mono">13:00</div>Libero</div>
+    <div class="slot full" style="--i:2"><div class="t mono">18:30</div><div class="x">Tre cose che avrei voluto sapere prima del primo libro.</div></div>
+  </div></div>
 </div>
 
 <div id="app" class="hidden">
-<header>
-  <h1>Notes Studio</h1>
-  <nav id="nav"></nav>
-  <button class="link" id="logout">Esci</button>
-</header>
-<main id="view"></main>
+  <aside>
+    <div class="brand"><span class="mark"><svg class="i"><use href="#i-pen"/></svg></span>Notes Studio</div>
+    <nav id="nav"></nav>
+    <div class="side-foot">
+      <button class="status" id="status"><span class="dot"></span><span><span id="statusText">Collegamento</span><small id="statusSub"></small></span></button>
+      <button class="quiet" id="logout"><svg class="i"><use href="#i-out"/></svg>Esci</button>
+    </div>
+  </aside>
+  <main id="view"></main>
 </div>
+
+<dialog id="editor"></dialog>
 <div id="toast"></div>
 
 <script>
 const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const fmt = (ms) => ms ? new Date(ms).toLocaleString("it-IT", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+const icon = (n) => `<svg class="i"><use href="#i-${n}"/></svg>`;
+let TZ = "Europe/Rome";
+const fmt = (ms, o) => ms ? new Date(ms).toLocaleString("it-IT", { timeZone: TZ, ...(o || { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) }) : "";
+const hm = (ms) => fmt(ms, { hour: "2-digit", minute: "2-digit" });
 const toLocalInput = (ms) => { const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); };
+const skel = (n, h = 64) => Array.from({ length: n }, () => `<div class="skel" style="height:${h}px;margin-bottom:10px"></div>`).join("");
+const empty = (title, text) => `<div class="empty"><b>${title}</b>${text}</div>`;
+const counts = (n) => `<div class="stat-icons meta mono"><span>${icon("heart")}${n.likes}</span><span>${icon("repeat")}${n.restacks}</span><span>${icon("chat")}${n.replies}</span></div>`;
 
 let toastTimer;
-function toast(msg) { const t = $("#toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.style.display = "none"), 4200); }
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 4200); }
 
 async function api(path, method = "GET", body) {
   const res = await fetch("/api" + path, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
@@ -89,135 +269,215 @@ async function api(path, method = "GET", body) {
   if (!res.ok) throw new Error(data.error || "Errore " + res.status);
   return data;
 }
-// Runs an action, disables the button meanwhile, shows errors as a toast.
+// Runs an action with the button disabled; errors surface as a toast.
 async function act(btn, fn) {
   if (btn) btn.disabled = true;
-  try { await fn(); } catch (e) { toast(e.message); } finally { if (btn) btn.disabled = false; }
+  try { return await fn(); } catch (e) { toast(e.message); } finally { if (btn) btn.disabled = false; }
 }
 
-const TABS = { queue: "Coda", generate: "Genera", stats: "Statistiche", activity: "Attività", follows: "Follows", settings: "Impostazioni" };
-let tab = location.hash.slice(1) in TABS ? location.hash.slice(1) : "queue";
+// ---------- shell ----------
+const TABS = { studio: ["Studio", "studio"], generate: ["Genera", "spark"], stats: ["Statistiche", "chart"], activity: ["Attività", "chat"], feed: ["Feed", "users"], settings: ["Impostazioni", "gear"] };
+let tab = location.hash.slice(1) in TABS ? location.hash.slice(1) : "studio";
+let settings = null;
 
 function showLogin() { $("#app").classList.add("hidden"); $("#login").classList.remove("hidden"); }
-function showApp() {
-  $("#login").classList.add("hidden"); $("#app").classList.remove("hidden");
-  $("#nav").innerHTML = Object.entries(TABS).map(([k, v]) => `<button data-tab="${k}" class="${k === tab ? "on" : ""}">${v}</button>`).join("");
-  render();
+function go(t) { tab = t; history.replaceState(null, "", "#" + t); drawNav(); render(); }
+function drawNav(badges = {}) {
+  $("#nav").innerHTML = Object.entries(TABS).map(([k, [label, ic]]) =>
+    `<button data-tab="${k}" class="${k === tab ? "on" : ""}">${icon(ic)}<span>${label}</span>${badges[k] ? `<span class="badge mono">${badges[k]}</span>` : ""}</button>`).join("");
 }
-$("#nav").onclick = (e) => { const t = e.target.dataset.tab; if (t) { tab = t; location.hash = t; showApp(); } };
+function drawStatus() {
+  const s = settings; if (!s) return;
+  const [cls, text, sub] = !s.handle ? ["warn", "Da configurare", "Imposta il tuo handle"]
+    : !s.has_cookie ? ["warn", "Cookie mancante", "Sola lettura"]
+    : s.cookie_ok === false ? ["bad", "Collegamento interrotto", "Reinserisci il cookie"]
+    : s.cookie_ok === true ? ["ok", "Collegato", "@" + s.handle]
+    : ["", "Da verificare", "@" + s.handle];
+  $("#status .dot").className = "dot " + cls; $("#statusText").textContent = text; $("#statusSub").textContent = sub;
+}
+async function boot() {
+  settings = await api("/settings"); TZ = settings.timezone;
+  $("#login").classList.add("hidden"); $("#app").classList.remove("hidden");
+  drawNav(); drawStatus(); render();
+  api("/activity").then((a) => drawNav({ activity: a.length || 0 })).catch(() => {});
+}
+$("#nav").onclick = (e) => { const b = e.target.closest("[data-tab]"); if (b) go(b.dataset.tab); };
+$("#status").onclick = () => go("settings");
 $("#loginForm").onsubmit = async (e) => {
-  e.preventDefault();
-  try { await api("/login", "POST", { password: $("#pw").value }); $("#pw").value = ""; showApp(); }
-  catch (err) { $("#loginErr").textContent = err.message; }
+  e.preventDefault(); $("#loginErr").textContent = "";
+  try { await api("/login", "POST", { password: $("#pw").value }); $("#pw").value = ""; boot(); } catch (err) { $("#loginErr").textContent = err.message; }
 };
 $("#logout").onclick = async () => { await api("/logout", "POST"); showLogin(); };
 
 const views = {};
 async function render() {
-  const v = $("#view");
-  v.innerHTML = '<p class="sub">Caricamento…</p>';
+  const v = $("#view"); v.onclick = v.onkeydown = null; document.onkeydown = null;
+  v.innerHTML = `<div class="skel" style="height:34px;width:220px;margin-bottom:26px"></div>${skel(4)}`;
   try { await views[tab](v); } catch (e) { if (e.message !== "Sessione scaduta") v.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
 }
 
-// ---------- Coda ----------
-views.queue = async (v) => {
-  const notes = await api("/notes");
+// ---------- Studio ----------
+let weekOffset = 0;
+views.studio = async (v) => {
+  const [notes, week] = await Promise.all([api("/notes"), api("/week?offset=" + weekOffset)]);
   const by = (s) => notes.filter((n) => n.status === s);
-  const drafts = by("draft"), sched = by("scheduled"), failed = [...by("failed"), ...by("publishing")], pub = by("published");
-  const card = (n) => `
-    <div class="card" data-id="${n.id}">
-      <div class="row meta" style="margin-bottom:6px">
-        <span class="chip ${n.status}">${{ draft: "Bozza", scheduled: "In coda", failed: "Errore", publishing: "In pubblicazione", published: "Pubblicata" }[n.status]}</span>
-        ${n.status === "scheduled" ? `<span>${fmt(n.scheduled_at)}</span>` : ""}
-        ${n.status === "published" ? `<span>${fmt(n.published_at)}</span>` : ""}
-        ${n.source === "generated" ? '<span class="chip">generata</span>' : ""}
-        <span class="grow"></span><span>${n.body.length} caratteri</span>
-      </div>
-      <div class="body">${esc(n.body)}</div>
-      ${n.error ? `<p class="err">${esc(n.error)}</p>` : ""}
-      ${n.status === "publishing" ? '<p class="meta">Bloccata in pubblicazione: controlla su Substack se è uscita prima di ripubblicarla.</p>' : ""}
-      ${n.status !== "published" && n.status !== "publishing" ? `
-      <div class="row" style="margin-top:10px">
-        <input type="datetime-local" class="when" value="${n.scheduled_at ? toLocalInput(n.scheduled_at) : ""}">
-        <button class="ghost" data-a="setTime">Programma</button>
-        ${n.status === "scheduled" ? '<button class="ghost" data-a="unschedule">Togli dalla coda</button>' : ""}
-        <span class="grow"></span>
-        <button class="link" data-a="edit">Modifica</button>
-        <button class="link" data-a="now">Pubblica ora</button>
-        <button class="link" data-a="del">Elimina</button>
-      </div>` : ""}
-    </div>`;
-  v.innerHTML = `
-    <h2>Coda</h2><p class="sub">Scrivi, metti in coda e lascia che le Notes escano agli orari scelti.</p>
-    <div class="card">
-      <textarea id="newBody" placeholder="Scrivi una Note. Per importarne molte insieme, separale con una riga che contiene solo ---"></textarea>
-      <div class="row" style="margin-top:8px">
-        <span class="meta" id="count">0 caratteri</span><span class="grow"></span>
-        <button class="ghost" id="addDraft">Salva come bozza</button>
-        <button class="btn" id="addQueue">Aggiungi alla coda</button>
-      </div>
-    </div>
-    ${failed.length ? `<h3>Da controllare (${failed.length})</h3>${failed.map(card).join("")}` : ""}
-    <div class="row" style="margin:18px 0 8px"><h3 style="margin:0" class="grow">In coda (${sched.length})</h3>
-      ${sched.length ? '<button class="ghost" id="unAll">Svuota coda</button>' : ""}</div>
-    ${sched.map(card).join("") || '<p class="sub">Nessuna Note programmata.</p>'}
-    <div class="row" style="margin:18px 0 8px"><h3 style="margin:0" class="grow">Bozze (${drafts.length})</h3>
-      ${drafts.length ? '<button class="btn" id="schedAll">Programma tutte nei prossimi slot</button>' : ""}</div>
-    ${drafts.map(card).join("") || '<p class="sub">Nessuna bozza.</p>'}
-    ${pub.length ? `<h3 style="margin-top:18px">Pubblicate da qui (${pub.length})</h3>${pub.slice(0, 30).map(card).join("")}` : ""}`;
+  const drafts = by("draft"), sched = by("scheduled"), stuck = [...by("failed"), ...by("publishing")], pub = by("published");
+  const slotOf = new Map(sched.map((n) => [n.scheduled_at, n]));
+  const first = week.days[0], last = week.days[6];
+  const range = `${fmt(first.start, { day: "numeric", month: "short" })} – ${fmt(last.start, { day: "numeric", month: "short" })}`;
 
-  const nb = $("#newBody"); nb.oninput = () => ($("#count").textContent = nb.value.length + " caratteri");
-  const add = (queue) => (e) => act(e.target, async () => {
+  const dayHtml = (d, i) => {
+    const used = new Set();
+    const cells = d.slots.map((s) => {
+      const n = slotOf.get(s.ts);
+      if (n) { used.add(n.id); return `<div class="slot full" draggable="true" data-id="${n.id}" data-ts="${s.ts}"><div class="t mono">${icon("clock")}${s.label}</div><div class="x">${esc(n.body)}</div></div>`; }
+      return `<button class="slot free ${s.ts < week.now ? "past" : ""}" data-ts="${s.ts}"><div class="t mono">${s.label}</div>Libero</button>`;
+    });
+    // Notes scheduled outside the configured slots still show on their day.
+    const extra = sched.filter((n) => n.scheduled_at >= d.start && n.scheduled_at < d.end && !used.has(n.id))
+      .map((n) => `<div class="slot full" draggable="true" data-id="${n.id}"><div class="t mono">${icon("clock")}${hm(n.scheduled_at)}</div><div class="x">${esc(n.body)}</div></div>`);
+    return `<div class="day ${weekOffset === 0 && i === 0 ? "today" : ""}">
+      <div class="dname">${fmt(d.start, { weekday: "short" })}<b class="mono">${fmt(d.start, { day: "numeric" })}</b></div>
+      <div class="slots">${cells.join("")}${extra.join("")}</div></div>`;
+  };
+  const draftHtml = (n, i) => `<div class="draft" draggable="true" data-id="${n.id}" style="--i:${i}">
+      <span class="grip" title="Trascina su uno slot">${icon("grip")}</span>
+      <div class="grow"><div class="body clamp">${esc(n.body)}</div>
+        <div class="row meta" style="margin-top:6px">${n.status === "failed" ? '<span class="tag bad">Errore</span>' : ""}${n.status === "publishing" ? '<span class="tag bad">Bloccata</span>' : ""}${n.source === "generated" ? `<span class="tag">${icon("spark")}generata</span>` : ""}<span class="mono">${n.body.length}</span></div>
+        ${n.error ? `<p class="err">${esc(n.error)}</p>` : ""}</div></div>`;
+
+  v.innerHTML = `
+    <div class="head"><div><h1>Studio</h1><p class="lede">Scrivi a sinistra, pianifica a destra. Trascina una bozza su uno slot libero, oppure clicca lo slot per scriverci dentro.</p></div></div>
+    <div class="studio">
+      <section>
+        <div class="panel pad composer">
+          <textarea id="newBody" placeholder="A cosa stai pensando? Per importarne più d'una, separale con una riga che contiene solo ---"></textarea>
+          <div class="bar"><span class="meta mono" id="count">0</span><span class="grow"></span>
+            <button class="ghost" id="addDraft">Salva bozza</button><button class="btn" id="addQueue">${icon("clock")}Prossimo slot</button></div>
+        </div>
+        ${stuck.length ? `<div class="sec"><h2>Da controllare</h2><span class="n mono">${stuck.length}</span></div><div>${stuck.map(draftHtml).join("")}</div>` : ""}
+        <div class="sec"><h2>Bozze</h2><span class="n mono">${drafts.length}</span><span class="grow"></span>${drafts.length ? `<button class="quiet" id="schedAll">${icon("clock")}Programma tutte</button>` : ""}</div>
+        <div class="dropzone" id="draftZone">${drafts.map(draftHtml).join("") || empty("Nessuna bozza", "Scrivi qui sopra o chiedi a Claude nella scheda Genera. Trascinando qui una Note programmata, torna bozza.")}</div>
+        ${pub.length ? `<div class="sec"><h2>Pubblicate da qui</h2><span class="n mono">${pub.length}</span></div><div class="list">${pub.slice(0, 12).map((n, i) => `<div class="item" style="--i:${i}"><div class="body clamp">${esc(n.body)}</div><div class="meta" style="margin-top:5px">${fmt(n.published_at)}</div></div>`).join("")}</div>` : ""}
+      </section>
+      <section class="panel week">
+        <div class="week-head"><h2 class="grow" style="color:var(--ink);font-size:14.5px">${range}</h2>
+          <span class="meta mono" style="margin-right:6px">${sched.length} in coda</span>
+          <button class="quiet" id="wPrev" title="Settimana precedente" ${weekOffset <= 0 ? "disabled" : ""}>${icon("left")}</button>
+          <button class="quiet" id="wNow" ${weekOffset === 0 ? "disabled" : ""}>Oggi</button>
+          <button class="quiet" id="wNext" title="Settimana successiva">${icon("right")}</button></div>
+        ${week.days[0].slots.length ? week.days.map(dayHtml).join("") : `<div class="pad">${empty("Nessuno slot orario", "Aggiungi gli orari di pubblicazione nelle Impostazioni.")}</div>`}
+      </section>
+    </div>`;
+
+  const nb = $("#newBody"); nb.oninput = () => ($("#count").textContent = nb.value.length);
+  const add = (queue) => (e) => act(e.currentTarget, async () => {
     const bodies = nb.value.split(/\n\s*---\s*\n/).map((s) => s.trim()).filter(Boolean);
     if (!bodies.length) throw new Error("Scrivi qualcosa prima");
     await api("/notes", "POST", { bodies });
     if (queue) await api("/notes/schedule", "POST", {});
-    toast(bodies.length + (queue ? " in coda" : " salvate come bozza")); render();
+    toast(bodies.length === 1 ? (queue ? "Note in coda" : "Bozza salvata") : `${bodies.length} Notes ${queue ? "in coda" : "salvate"}`); render();
   });
   $("#addDraft").onclick = add(false); $("#addQueue").onclick = add(true);
-  if ($("#schedAll")) $("#schedAll").onclick = (e) => act(e.target, async () => { const r = await api("/notes/schedule", "POST", {}); toast(r.scheduled + " Notes programmate"); render(); });
-  if ($("#unAll")) $("#unAll").onclick = (e) => act(e.target, async () => { if (!confirm("Riportare tutte le Notes in coda a bozza?")) return; await api("/notes/unschedule", "POST"); render(); });
+  if ($("#schedAll")) $("#schedAll").onclick = (e) => act(e.currentTarget, async () => { const r = await api("/notes/schedule", "POST", {}); toast(`${r.scheduled} Notes programmate`); render(); });
+  $("#wPrev").onclick = () => { weekOffset--; render(); }; $("#wNext").onclick = () => { weekOffset++; render(); }; $("#wNow").onclick = () => { weekOffset = 0; render(); };
 
   v.onclick = (e) => {
-    const a = e.target.dataset.a; if (!a) return;
-    const el = e.target.closest(".card"), id = el.dataset.id, n = notes.find((x) => x.id == id);
-    act(e.target, async () => {
-      if (a === "setTime") { const w = $(".when", el).value; if (!w) throw new Error("Scegli data e ora"); await api("/notes/" + id, "PUT", { scheduled_at: new Date(w).getTime() }); }
-      if (a === "unschedule") await api("/notes/" + id, "PUT", { scheduled_at: null });
-      if (a === "del") { if (!confirm("Eliminare questa Note?")) return; await api("/notes/" + id, "DELETE"); }
-      if (a === "now") { if (!confirm("Pubblicare subito su Substack?")) return; await api("/notes/" + id + "/publish", "POST"); toast("Pubblicata"); }
-      if (a === "edit") {
-        $(".body", el).outerHTML = `<textarea class="editBody">${esc(n.body)}</textarea><div class="row" style="margin-top:6px"><button class="btn" data-a="save">Salva</button><button class="ghost" data-a="cancel">Annulla</button></div>`;
-        return;
-      }
-      if (a === "save") await api("/notes/" + id, "PUT", { body: $(".editBody", el).value });
-      render();
-    });
+    const free = e.target.closest(".slot.free"); if (free) return openEditor({ scheduled_at: +free.dataset.ts, body: "" });
+    const el = e.target.closest("[data-id]"); if (el) openEditor(notes.find((n) => n.id == el.dataset.id));
   };
+  // Drag a note onto a free slot to schedule it, or back onto the drafts to unschedule it.
+  let dragId = null;
+  v.addEventListener("dragstart", (e) => { const el = e.target.closest("[draggable]"); if (!el) return; dragId = el.dataset.id; el.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dragId); });
+  v.addEventListener("dragend", () => { $$(".dragging, .over", v).forEach((x) => x.classList.remove("dragging", "over")); dragId = null; });
+  const target = (e) => e.target.closest(".slot.free:not(.past), #draftZone");
+  v.addEventListener("dragover", (e) => { const t = target(e); if (!t || !dragId) return; e.preventDefault(); $$(".over", v).forEach((x) => x !== t && x.classList.remove("over")); t.classList.add("over"); });
+  v.addEventListener("dragleave", (e) => { const t = target(e); if (t && !t.contains(e.relatedTarget)) t.classList.remove("over"); });
+  v.addEventListener("drop", (e) => {
+    const t = target(e); if (!t || !dragId) return; e.preventDefault(); const id = dragId;
+    act(null, async () => { await api("/notes/" + id, "PUT", { scheduled_at: t.id === "draftZone" ? null : +t.dataset.ts }); render(); });
+  });
 };
+
+// ---------- note editor ----------
+function openEditor(n) {
+  const d = $("#editor"), isNew = !n.id, locked = n.status === "published" || n.status === "publishing";
+  d.innerHTML = `<form method="dialog" class="dlg">
+    <div class="row"><h1 style="font-size:18px" class="grow">${isNew ? "Nuova Note" : "Modifica Note"}</h1><button class="quiet" value="close" title="Chiudi">${icon("x")}</button></div>
+    <textarea id="eBody" ${locked ? "readonly" : ""} placeholder="Scrivi la Note…">${esc(n.body)}</textarea>
+    <div class="row"><span class="meta mono" id="eCount">${n.body.length}</span><span class="grow"></span>
+      <span class="meta">Riscrivi:</span>
+      <button type="button" class="ghost" data-mode="shorter">${icon("wand")}Più corta</button>
+      <button type="button" class="ghost" data-mode="direct">${icon("wand")}Più diretta</button>
+      <button type="button" class="ghost" data-mode="hooks">${icon("wand")}3 aperture</button></div>
+    <div id="eVariants" style="display:grid;gap:8px"></div>
+    <div class="field" style="margin:0"><label for="eWhen">Data e ora di pubblicazione</label>
+      <input type="datetime-local" id="eWhen" value="${n.scheduled_at ? toLocalInput(n.scheduled_at) : ""}"><span class="help">Nell'orario di questo dispositivo. Lascia vuoto per tenerla tra le bozze.</span></div>
+    <div class="row">
+      ${isNew ? "" : `<button type="button" class="quiet danger" id="eDel">${icon("trash")}Elimina</button><button type="button" class="quiet" id="eNow">${icon("send")}Pubblica ora</button>`}
+      <span class="grow"></span><button class="ghost" value="close">Annulla</button><button type="button" class="btn" id="eSave">${icon("check")}Salva</button></div>
+  </form>`;
+  const body = $("#eBody", d); body.oninput = () => ($("#eCount", d).textContent = body.value.length);
+  const close = () => { d.close(); render(); };
+  $$("[data-mode]", d).forEach((b) => (b.onclick = () => act(b, async () => {
+    if (!body.value.trim()) throw new Error("Scrivi prima una bozza da riscrivere");
+    $("#eVariants", d).innerHTML = skel(3, 58);
+    try {
+      const r = await api("/rewrite", "POST", { body: body.value, mode: b.dataset.mode });
+      $("#eVariants", d).innerHTML = `<span class="meta">Clicca una versione per usarla. L'originale resta finché non salvi.</span>` + r.variants.map((x, i) => `<div class="variant body" style="--i:${i}">${esc(x)}</div>`).join("");
+      $$(".variant", d).forEach((el, i) => (el.onclick = () => { body.value = r.variants[i]; body.oninput(); $("#eVariants", d).innerHTML = ""; }));
+    } catch (e) { $("#eVariants", d).innerHTML = ""; throw e; }
+  })));
+  $("#eSave", d).onclick = (e) => act(e.currentTarget, async () => {
+    const text = body.value.trim(); if (!text) throw new Error("Testo vuoto");
+    const when = $("#eWhen", d).value ? new Date($("#eWhen", d).value).getTime() : null;
+    if (when && when < Date.now()) throw new Error("La data è nel passato");
+    if (isNew) await api("/notes", "POST", { body: text, scheduled_at: when || undefined });
+    else await api("/notes/" + n.id, "PUT", { body: text, scheduled_at: when });
+    toast(when ? "Programmata per " + fmt(when) : "Bozza salvata"); close();
+  });
+  if (!isNew) {
+    $("#eDel", d).onclick = (e) => act(e.currentTarget, async () => { if (!confirm("Eliminare questa Note?")) return; await api("/notes/" + n.id, "DELETE"); close(); });
+    $("#eNow", d).onclick = (e) => act(e.currentTarget, async () => {
+      if (!confirm("Pubblicare subito su Substack?")) return;
+      if (body.value.trim() !== n.body) await api("/notes/" + n.id, "PUT", { body: body.value.trim() });
+      try { await api(`/notes/${n.id}/publish`, "POST"); toast("Pubblicata su Substack"); } finally { close(); }
+    });
+  }
+  d.showModal();
+}
 
 // ---------- Genera ----------
 views.generate = async (v) => {
-  const s = await api("/settings");
+  const st = await api("/stats?days=3650");
   v.innerHTML = `
-    <h2>Genera</h2><p class="sub">Claude scrive bozze nella tua voce, usando come riferimento le tue Notes pubblicate e le istruzioni nelle Impostazioni.</p>
-    ${s.has_claude_key ? "" : '<p class="err">ANTHROPIC_API_KEY non è configurata: la generazione non funzionerà.</p>'}
-    <div class="card">
-      <label>Idea o tema</label><textarea id="gTopic" placeholder="Es. perché la costanza batte il talento quando si scrive online"></textarea>
-      <label>Oppure il link di un tuo post Substack</label><input id="gUrl" placeholder="https://tuonome.substack.com/p/titolo-del-post">
-      <label>Oppure incolla il testo di un articolo</label><textarea id="gText"></textarea>
-      <div class="row" style="margin-top:12px">
-        <label style="margin:0">Quante Notes</label><input id="gCount" class="small" type="number" min="1" max="20" value="5" style="width:80px">
-        <span class="grow"></span><button class="btn" id="gGo">Genera bozze</button>
-      </div>
-      <p class="meta" id="gMsg"></p>
+    <div class="head"><div><h1>Genera</h1><p class="lede">Dai a Claude un'idea, un articolo o il link di un post: scrive le bozze nella tua voce e le lascia nello Studio, pronte da rivedere.</p></div></div>
+    <div class="two">
+      <section>
+        <div class="field"><label for="gTopic">Idea o tema</label><textarea id="gTopic" placeholder="Per esempio: perché la costanza batte il talento quando si scrive online"></textarea></div>
+        <div class="field"><label for="gUrl">Link di un post Substack</label><input id="gUrl" placeholder="https://tuonome.substack.com/p/titolo-del-post"><span class="help">Il post deve essere pubblico.</span></div>
+        <div class="field"><label for="gText">Testo di un articolo</label><textarea id="gText" placeholder="Incolla qui il testo da trasformare in Notes"></textarea></div>
+        <div class="row"><div class="field" style="margin:0"><label for="gCount">Quante Notes</label><input id="gCount" class="auto mono" type="number" min="1" max="20" value="5" style="width:90px"></div>
+          <span class="grow"></span><button class="btn" id="gGo">${icon("spark")}Genera bozze</button></div>
+        <div id="gMsg" style="margin-top:16px"></div>
+      </section>
+      <section class="panel pad">
+        <h2 style="margin-bottom:12px">Su cosa si basa la tua voce</h2>
+        <div class="list">
+          <div class="item"><b class="mono" style="font-size:22px;font-weight:500">${st.total}</b><div class="meta">Notes pubblicate usate come esempi${st.total < 10 ? ". Sono poche: per ora contano di più le istruzioni qui sotto." : "."}</div></div>
+          <div class="item"><span class="tag ${settings.voice_prompt ? "ok" : ""}">${settings.voice_prompt ? icon("check") + "Istruzioni di voce presenti" : "Istruzioni di voce mancanti"}</span>
+            <div class="meta" style="margin-top:6px">Lingua, tono, argomenti e cosa evitare. Si modificano nelle Impostazioni.</div></div>
+          <div class="item"><span class="tag ${settings.has_claude_key ? "ok" : "bad"}">${settings.has_claude_key ? icon("check") + "Chiave Claude configurata" : "Chiave Claude mancante"}</span>
+            ${settings.has_claude_key ? "" : '<div class="meta" style="margin-top:6px">Aggiungi il segreto ANTHROPIC_API_KEY su Cloudflare.</div>'}</div>
+        </div>
+      </section>
     </div>`;
-  $("#gGo").onclick = (e) => act(e.target, async () => {
-    $("#gMsg").textContent = "Sto scrivendo… può volerci fino a un minuto.";
+  $("#gGo").onclick = (e) => act(e.currentTarget, async () => {
+    $("#gMsg").innerHTML = `<p class="meta">Sto scrivendo. Può volerci fino a un minuto.</p>${skel(3, 70)}`;
     try {
       const r = await api("/generate", "POST", { topic: $("#gTopic").value, source_url: $("#gUrl").value, source_text: $("#gText").value, count: +$("#gCount").value });
-      toast(r.created + " bozze create"); tab = "queue"; location.hash = "queue"; showApp();
-    } finally { if ($("#gMsg")) $("#gMsg").textContent = ""; }
+      toast(`${r.created} bozze create`); go("studio");
+    } finally { if ($("#gMsg")) $("#gMsg").innerHTML = ""; }
   });
 };
 
@@ -227,107 +487,140 @@ views.stats = async (v) => {
   const d = await api("/stats?days=" + statDays);
   const bars = (rows, keys, label) => {
     const map = new Map(rows.map((r) => [String(r.key), r])); const max = Math.max(1, ...rows.map((r) => r.avg));
-    return `<div class="bars">${keys.map((k) => { const r = map.get(String(k)); return `<div class="${r ? "" : "empty"}" style="height:${r ? Math.max(3, (r.avg / max) * 100) : 2}%" title="${label(k)}: media ${r ? r.avg : 0} su ${r ? r.count : 0} Notes"></div>`; }).join("")}</div>
-            <div class="axis">${keys.map((k) => `<span>${label(k)}</span>`).join("")}</div>`;
+    return `<div class="bars">${keys.map((k, i) => { const r = map.get(String(k)); return `<div class="${r ? "" : "z"}" style="--i:${i};height:${r ? Math.max(4, (r.avg / max) * 100) : 2}%" title="${label(k)}: media ${r ? r.avg : 0} su ${r ? r.count : 0} Notes"></div>`; }).join("")}</div><div class="axis mono">${keys.map((k) => `<span>${label(k)}</span>`).join("")}</div>`;
   };
   const wd = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], wdIt = { Mon: "Lun", Tue: "Mar", Wed: "Mer", Thu: "Gio", Fri: "Ven", Sat: "Sab", Sun: "Dom" };
+  const avg = d.total ? ((d.likes + d.restacks + d.replies) / d.total).toFixed(1) : "0";
   v.innerHTML = `
-    <div class="row"><div class="grow"><h2>Statistiche</h2><p class="sub">Interazioni pubbliche delle tue Notes (like, restack, risposte). ${d.last_sync ? "Aggiornate " + fmt(d.last_sync) + "." : "Mai sincronizzate."}</p></div>
-      <select id="days" class="small">${[30, 90, 365, 3650].map((x) => `<option value="${x}" ${x === statDays ? "selected" : ""}>${x === 3650 ? "Sempre" : "Ultimi " + x + " giorni"}</option>`).join("")}</select>
-      <button class="ghost" id="syncNow">Sincronizza</button><button class="ghost" id="syncDeep" title="Scarica anche le Notes più vecchie">Importa storico</button></div>
-    <div class="stats">
-      <div class="card stat"><b>${d.total}</b>Notes</div><div class="card stat"><b>${d.likes}</b>Like</div>
-      <div class="card stat"><b>${d.restacks}</b>Restack</div><div class="card stat"><b>${d.replies}</b>Risposte</div>
-      <div class="card stat"><b>${d.total ? ((d.likes + d.restacks + d.replies) / d.total).toFixed(1) : 0}</b>Interazioni medie</div>
-    </div>
+    <div class="head"><div><h1>Statistiche</h1><p class="lede">Interazioni pubbliche delle tue Notes. ${d.last_sync ? "Aggiornate " + fmt(d.last_sync) + "." : "Mai sincronizzate."}</p></div>
+      <select id="days" class="auto">${[30, 90, 365, 3650].map((x) => `<option value="${x}" ${x === statDays ? "selected" : ""}>${x === 3650 ? "Da sempre" : "Ultimi " + x + " giorni"}</option>`).join("")}</select>
+      <button class="ghost" id="syncNow">${icon("repeat")}Sincronizza</button><button class="quiet" id="syncDeep" title="Scarica anche le Notes più vecchie">Importa storico</button></div>
     ${d.total ? `
-    <div class="card"><b>Interazioni medie per ora di pubblicazione</b><p class="meta">Passa sopra una barra per i dettagli. Le ore con poche Notes sono poco affidabili.</p>${bars(d.by_hour, [...Array(24).keys()], (k) => k)}</div>
-    <div class="card"><b>Per giorno della settimana</b>${bars(d.by_weekday, wd, (k) => wdIt[k])}</div>
-    <div class="card"><b>Per lunghezza</b><table>${d.by_length.map((r) => `<tr><td>${esc(r.key)}</td><td>${r.count} Notes</td><td>media ${r.avg}</td></tr>`).join("")}</table></div>
-    <h3>Le tue Notes migliori</h3>
-    ${d.top.map((n) => `<div class="card"><div class="body">${esc(n.body)}</div><div class="row meta" style="margin-top:8px"><span>${fmt(n.date)}</span><span>♥ ${n.likes}</span><span>↻ ${n.restacks}</span><span>💬 ${n.replies}</span><span class="grow"></span><button class="link" data-reuse="${n.substack_id}">Riusa come bozza</button><a class="meta" href="https://substack.com/note/c-${n.substack_id}" target="_blank" rel="noopener">Apri</a></div></div>`).join("")}`
-    : '<div class="card">Nessuna Note in questo periodo. Imposta il tuo handle nelle Impostazioni e premi <b>Importa storico</b>.</div>'}`;
+    <div class="metrics">
+      <div class="metric"><b>${avg}</b><span class="meta">interazioni medie per Note</span></div>
+      <div class="metric"><b>${d.total}</b><span class="meta">Notes</span></div><div class="metric"><b>${d.likes}</b><span class="meta">like</span></div>
+      <div class="metric"><b>${d.restacks}</b><span class="meta">restack</span></div><div class="metric"><b>${d.replies}</b><span class="meta">risposte</span></div>
+    </div>
+    <div class="charts">
+      <div><h2>Interazioni medie per ora di pubblicazione</h2>${bars(d.by_hour, [...Array(24).keys()], (k) => k)}<p class="meta" style="margin-top:10px">Le ore con poche Notes sono poco affidabili: passa sopra una barra per vedere su quante si basa.</p></div>
+      <div><h2>Per giorno della settimana</h2>${bars(d.by_weekday, wd, (k) => wdIt[k])}
+        <div class="list" style="margin-top:22px">${d.by_length.map((r) => `<div class="item row" style="padding:9px 2px"><span class="grow">${esc(r.key)}</span><span class="meta mono">${r.count}</span><span class="mono" style="width:54px;text-align:right">${r.avg}</span></div>`).join("")}</div></div>
+    </div>
+    <div class="sec"><h2>Le tue Notes migliori</h2></div>
+    <div class="list">${d.top.map((n, i) => `<div class="item" style="--i:${i}"><div class="body">${esc(n.body)}</div>
+      <div class="row" style="margin-top:9px">${counts(n)}<span class="meta">${fmt(n.date)}</span><span class="grow"></span>
+        <button class="quiet" data-reuse="${n.substack_id}">${icon("plus")}Riusa come bozza</button><a class="quiet" href="https://substack.com/note/c-${n.substack_id}" target="_blank" rel="noopener">${icon("ext")}Apri</a></div></div>`).join("")}</div>`
+    : empty("Nessuna Note in questo periodo", "Premi Importa storico per scaricare le tue Notes da Substack, oppure allarga il periodo.")}`;
   $("#days").onchange = (e) => { statDays = +e.target.value; render(); };
-  $("#syncNow").onclick = (e) => act(e.target, async () => { const r = await api("/sync", "POST"); toast(`Sincronizzate ${r.myNotes} Notes`); render(); });
-  $("#syncDeep").onclick = (e) => act(e.target, async () => { const r = await api("/sync?deep=1", "POST"); toast(`Importate ${r.myNotes} Notes`); render(); });
-  v.onclick = (e) => { const id = e.target.dataset.reuse; if (!id) return; act(e.target, async () => { await api("/notes", "POST", { body: d.top.find((n) => n.substack_id === id).body }); toast("Copiata nelle bozze"); }); };
+  $("#syncNow").onclick = (e) => act(e.currentTarget, async () => { const r = await api("/sync", "POST"); toast(`Sincronizzate ${r.myNotes} Notes`); render(); });
+  $("#syncDeep").onclick = (e) => act(e.currentTarget, async () => { const r = await api("/sync?deep=1", "POST"); toast(`Importate ${r.myNotes} Notes`); render(); });
+  v.onclick = (e) => { const b = e.target.closest("[data-reuse]"); if (b) act(b, async () => { await api("/notes", "POST", { body: d.top.find((n) => n.substack_id === b.dataset.reuse).body }); toast("Copiata nelle bozze"); }); };
 };
 
 // ---------- Attività ----------
 views.activity = async (v) => {
-  const items = await api("/activity");
-  let cur = 0;
+  const items = await api("/activity"); let cur = 0;
   v.innerHTML = `
-    <h2>Attività</h2><p class="sub">Risposte alle tue Notes degli ultimi 14 giorni a cui non hai ancora risposto. <kbd>J</kbd>/<kbd>K</kbd> per scorrere, <kbd>R</kbd> per rispondere, <kbd>E</kbd> per archiviare.</p>
-    ${items.map((a, i) => `
-      <div class="card" data-i="${i}" data-id="${a.reply_id}">
-        <div class="meta">In risposta a: ${esc((a.note_body || "").slice(0, 140))}${(a.note_body || "").length > 140 ? "…" : ""}</div>
-        <p style="margin:8px 0"><b>${esc(a.author_name || a.author_handle || "Qualcuno")}</b> <span class="meta">${fmt(a.date)}</span></p>
+    <div class="head"><div><h1>Attività</h1><p class="lede">Risposte alle tue Notes degli ultimi 14 giorni ancora senza replica. <kbd>J</kbd> <kbd>K</kbd> per scorrere, <kbd>R</kbd> per rispondere, <kbd>S</kbd> per un suggerimento, <kbd>E</kbd> per archiviare.</p></div></div>
+    <div class="list" style="max-width:820px">${items.map((a, i) => `
+      <div class="item act" data-id="${a.reply_id}" style="--i:${i}">
+        <div class="meta clamp" style="-webkit-line-clamp:1">Sulla tua Note: ${esc(a.note_body || "")}</div>
+        <p style="margin:8px 0 4px"><b style="font-weight:600">${esc(a.author_name || a.author_handle || "Qualcuno")}</b> <span class="meta">${fmt(a.date)}</span></p>
         <div class="body">${esc(a.body)}</div>
-        <div class="row" style="margin-top:10px"><input class="grow reply" placeholder="Scrivi una risposta…"><button class="btn" data-a="reply">Rispondi</button>
-          <button class="ghost" data-a="done">Archivia</button><a class="meta" href="https://substack.com/note/c-${a.reply_id}" target="_blank" rel="noopener">Apri</a></div>
-      </div>`).join("") || '<div class="card">Tutto fatto: nessuna risposta in sospeso.</div>'}`;
-  const cards = () => [...v.querySelectorAll(".card[data-i]")];
+        <div class="row" style="margin-top:12px"><input class="grow reply" placeholder="Scrivi una risposta…">
+          <button class="ghost" data-a="suggest" title="Suggerisci una risposta">${icon("wand")}Suggerisci</button><button class="btn" data-a="reply">${icon("send")}Rispondi</button>
+          <button class="quiet" data-a="done" title="Archivia">${icon("check")}</button><a class="quiet" href="https://substack.com/note/c-${a.reply_id}" target="_blank" rel="noopener" title="Apri su Substack">${icon("ext")}</a></div>
+      </div>`).join("")}</div>
+    ${items.length ? "" : empty("Tutto fatto", "Nessuna risposta in sospeso. Le nuove arrivano a ogni sincronizzazione, ogni 30 minuti.")}`;
+  const cards = () => $$(".act", v);
   const focus = () => { cards().forEach((c, i) => c.classList.toggle("focus", i === cur)); cards()[cur]?.scrollIntoView({ block: "nearest" }); };
-  const done = async (el, btn, send) => act(btn, async () => {
-    if (send) { const t = $(".reply", el).value.trim(); if (!t) throw new Error("Scrivi la risposta"); await api(`/activity/${el.dataset.id}/reply`, "POST", { body: t }); toast("Risposta inviata"); }
+  const run = (el, btn, a) => act(btn, async () => {
+    const input = $(".reply", el);
+    if (a === "suggest") { input.placeholder = "Sto pensando…"; try { input.value = (await api(`/activity/${el.dataset.id}/suggest`, "POST")).reply; } finally { input.placeholder = "Scrivi una risposta…"; } return input.focus(); }
+    if (a === "reply") { if (!input.value.trim()) throw new Error("Scrivi la risposta"); await api(`/activity/${el.dataset.id}/reply`, "POST", { body: input.value.trim() }); toast("Risposta inviata"); }
     else await api(`/activity/${el.dataset.id}/done`, "POST");
-    el.remove(); cur = Math.min(cur, cards().length - 1); focus();
+    el.remove(); cur = Math.max(0, Math.min(cur, cards().length - 1)); focus(); drawNav({ activity: cards().length });
   });
-  v.onclick = (e) => { const a = e.target.dataset.a; if (a) done(e.target.closest(".card"), e.target, a === "reply"); };
-  v.onkeydown = (e) => { if (e.key === "Enter" && e.target.classList.contains("reply")) done(e.target.closest(".card"), null, true); if (e.key === "Escape") e.target.blur(); };
+  v.onclick = (e) => { const b = e.target.closest("[data-a]"); if (b) run(b.closest(".act"), b, b.dataset.a); };
+  v.onkeydown = (e) => { if (e.target.classList.contains("reply")) { if (e.key === "Enter") run(e.target.closest(".act"), null, "reply"); if (e.key === "Escape") e.target.blur(); } };
   document.onkeydown = (e) => {
-    if (tab !== "activity" || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || !cards().length) return;
-    if (e.key === "j") { cur = Math.min(cur + 1, cards().length - 1); focus(); }
-    if (e.key === "k") { cur = Math.max(cur - 1, 0); focus(); }
-    if (e.key === "r") { e.preventDefault(); $(".reply", cards()[cur]).focus(); }
-    if (e.key === "e") done(cards()[cur], null, false);
+    if (tab !== "activity" || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || !cards().length || e.metaKey || e.ctrlKey) return;
+    const k = e.key.toLowerCase();
+    if (k === "j") { cur = Math.min(cur + 1, cards().length - 1); focus(); }
+    if (k === "k") { cur = Math.max(cur - 1, 0); focus(); }
+    if (k === "r") { e.preventDefault(); $(".reply", cards()[cur]).focus(); }
+    if (k === "s") run(cards()[cur], null, "suggest");
+    if (k === "e") run(cards()[cur], null, "done");
   };
   focus();
 };
 
-// ---------- Follows ----------
-views.follows = async (v) => {
-  const d = await api("/follows");
-  v.innerHTML = `
-    <h2>Follows</h2><p class="sub">Le ultime Notes dei creator che vuoi seguire da vicino (massimo 20).</p>
-    <div class="card"><div class="row"><input id="fHandle" class="grow" placeholder="Handle o link al profilo, es. @nomecreator"><button class="btn" id="fAdd">Aggiungi</button></div>
-      <div class="row" style="margin-top:10px">${d.follows.map((f) => `<span class="chip">${esc(f.name || f.handle)} <button class="link" data-rm="${esc(f.handle)}" title="Rimuovi">×</button></span>`).join("")}</div></div>
-    ${d.feed.map((n) => `<div class="card"><p style="margin:0 0 6px"><b>${esc(n.name || n.handle)}</b> <span class="meta">${fmt(n.date)}</span></p><div class="body">${esc(n.body)}</div>
-      <div class="row meta" style="margin-top:8px"><span>♥ ${n.likes}</span><span>↻ ${n.restacks}</span><span>💬 ${n.replies}</span><span class="grow"></span><a class="meta" href="https://substack.com/note/c-${n.substack_id}" target="_blank" rel="noopener">Apri e rispondi su Substack</a></div></div>`).join("") || '<p class="sub">Aggiungi un creator per vedere le sue Notes.</p>'}`;
-  $("#fAdd").onclick = (e) => act(e.target, async () => { const r = await api("/follows", "POST", { handle: $("#fHandle").value }); toast("Aggiunto " + (r.name || "")); render(); });
-  v.onclick = (e) => { const h = e.target.dataset.rm; if (h) act(e.target, async () => { await api("/follows/" + encodeURIComponent(h), "DELETE"); render(); }); };
+// ---------- Feed (follows + inspirations) ----------
+let feedTab = "follows";
+views.feed = async (v) => {
+  const [d, insp] = await Promise.all([api("/follows"), api("/inspirations")]);
+  const tabs = `<div class="tabs"><button data-ft="follows" class="${feedTab === "follows" ? "on" : ""}">Creator seguiti</button><button data-ft="insp" class="${feedTab === "insp" ? "on" : ""}">Ispirazioni <span class="mono">${insp.length}</span></button></div>`;
+  const followsHtml = `
+    <div class="two"><section>
+      <div class="list">${d.feed.map((n, i) => `<div class="item" style="--i:${Math.min(i, 12)}"><p style="margin:0 0 5px"><b style="font-weight:600">${esc(n.name || n.handle)}</b> <span class="meta">${fmt(n.date)}</span></p><div class="body">${esc(n.body)}</div>
+        <div class="row" style="margin-top:9px">${counts(n)}<span class="grow"></span>
+          <button class="quiet" data-save="${n.substack_id}" ${n.saved ? "disabled" : ""}>${icon("bookmark")}${n.saved ? "Salvata" : "Salva come ispirazione"}</button>
+          <a class="quiet" href="https://substack.com/note/c-${n.substack_id}" target="_blank" rel="noopener">${icon("ext")}Rispondi su Substack</a></div></div>`).join("")}</div>
+      ${d.feed.length ? "" : empty("Il feed è vuoto", "Aggiungi un creator qui accanto per vedere le sue ultime Notes.")}
+    </section>
+    <section class="panel pad"><h2 style="margin-bottom:12px">Chi segui <span class="mono">${d.follows.length}/20</span></h2>
+      <div class="row" style="margin-bottom:12px"><input id="fHandle" class="grow" placeholder="@handle o link al profilo"><button class="btn" id="fAdd">${icon("plus")}Aggiungi</button></div>
+      <div class="list">${d.follows.map((f) => `<div class="item row" style="padding:9px 2px"><span class="grow">${esc(f.name || f.handle)}<span class="meta"> @${esc(f.handle)}</span></span><button class="quiet danger" data-rm="${esc(f.handle)}" title="Smetti di seguire">${icon("x")}</button></div>`).join("")}</div>
+    </section></div>`;
+  const inspHtml = `<div class="list" style="max-width:820px">${insp.map((n, i) => `<div class="item" style="--i:${i}"><p style="margin:0 0 5px"><b style="font-weight:600">${esc(n.name || n.handle)}</b> <span class="meta">salvata ${fmt(n.saved_at, { day: "numeric", month: "short" })}</span></p><div class="body">${esc(n.body)}</div>
+      <div class="row" style="margin-top:9px"><button class="ghost" data-remix="${n.substack_id}">${icon("spark")}Scrivi 3 bozze mie da questo spunto</button><span class="grow"></span><button class="quiet danger" data-unsave="${n.substack_id}">${icon("trash")}Rimuovi</button></div></div>`).join("")}</div>
+    ${insp.length ? "" : empty("Nessuna ispirazione salvata", "Dal feed dei creator seguiti, salva le Notes che funzionano: Claude ne riprende l'idea e la forma, non le frasi.")}`;
+  v.innerHTML = `<div class="head"><div><h1>Feed</h1><p class="lede">Le ultime Notes di chi vuoi seguire da vicino, e gli spunti che hai messo da parte.</p></div>${tabs}</div>${feedTab === "follows" ? followsHtml : inspHtml}`;
+  if ($("#fAdd")) $("#fAdd").onclick = (e) => act(e.currentTarget, async () => { const r = await api("/follows", "POST", { handle: $("#fHandle").value }); toast("Ora segui " + (r.name || "")); render(); });
+  v.onclick = (e) => {
+    const b = e.target.closest("button"); if (!b) return; const ds = b.dataset;
+    if (ds.ft) { feedTab = ds.ft; return render(); }
+    if (ds.rm) act(b, async () => { await api("/follows/" + encodeURIComponent(ds.rm), "DELETE"); render(); });
+    if (ds.save) act(b, async () => { await api("/inspirations", "POST", { substack_id: ds.save }); toast("Salvata tra le ispirazioni"); render(); });
+    if (ds.unsave) act(b, async () => { await api("/inspirations/" + ds.unsave, "DELETE"); render(); });
+    if (ds.remix) act(b, async () => { toast("Sto scrivendo, può volerci un minuto"); const r = await api(`/inspirations/${ds.remix}/remix`, "POST"); toast(`${r.created} bozze create`); go("studio"); });
+  };
 };
 
 // ---------- Impostazioni ----------
 views.settings = async (v) => {
-  const s = await api("/settings");
+  const s = settings = await api("/settings"); TZ = s.timezone; drawStatus();
   v.innerHTML = `
-    <h2>Impostazioni</h2><p class="sub">Collegamento a Substack, orari di pubblicazione e voce.</p>
-    <div class="card">
-      <label>Il tuo handle Substack</label><input id="sHandle" value="${esc(s.handle)}" placeholder="nomeutente (senza @)">
-      <label>Cookie di sessione Substack (<code>substack.sid</code>) — ${s.has_cookie ? "già salvato, compila solo per sostituirlo" : "non ancora impostato"}</label>
-      <input id="sCookie" type="password" autocomplete="off" placeholder="${s.has_cookie ? "••••••••" : "Incolla il valore del cookie"}">
-      <p class="meta">Su substack.com, da loggato: Strumenti per sviluppatori → Application → Cookies → <code>substack.sid</code>. Viene salvato cifrato e non è mai mostrato di nuovo. Chi lo possiede può agire come te su Substack.</p>
-      <label>Fuso orario</label><input id="sTz" value="${esc(s.timezone)}">
-      <label>Slot di pubblicazione giornalieri (HH:MM separati da virgola)</label><input id="sSlots" value="${esc(s.slots.join(", "))}">
-      <label>Istruzioni per la tua voce (usate dal generatore)</label>
-      <textarea id="sVoice" placeholder="Es. Scrivo in italiano, tono diretto, frasi brevi, niente emoji né hashtag. Parlo di self-publishing a chi parte da zero.">${esc(s.voice_prompt)}</textarea>
-      <div class="row" style="margin-top:12px"><button class="btn" id="sSave">Salva</button><button class="ghost" id="sTest">Verifica collegamento</button></div>
-    </div>
-    <div id="diag"></div>
-    ${s.last_sync_error ? `<p class="err">Ultima sincronizzazione: ${esc(s.last_sync_error)}</p>` : ""}`;
-  $("#sSave").onclick = (e) => act(e.target, async () => {
+    <div class="head"><div><h1>Impostazioni</h1><p class="lede">Collegamento a Substack, orari di pubblicazione e voce.</p></div></div>
+    <div class="two">
+      <section>
+        <div class="field"><label for="sHandle">Il tuo handle Substack</label><input id="sHandle" value="${esc(s.handle)}" placeholder="nomeutente"><span class="help">Quello che compare in substack.com/@nomeutente, senza la chiocciola.</span></div>
+        <div class="field"><label for="sCookie">Cookie di sessione Substack</label><input id="sCookie" type="password" autocomplete="off" placeholder="${s.has_cookie ? "Già salvato. Compila solo per sostituirlo" : "Incolla il valore di substack.sid"}">
+          <span class="help">Su substack.com da loggato: F12, Application, Cookies, riga substack.sid. Viene salvato cifrato e non è più mostrato. Chi lo possiede può agire come te.</span></div>
+        <div class="field"><label for="sSlots">Slot di pubblicazione giornalieri</label><input id="sSlots" class="mono" value="${esc(s.slots.join(", "))}"><span class="help">Orari nel formato HH:MM, separati da virgola.</span></div>
+        <div class="field"><label for="sTz">Fuso orario</label><input id="sTz" class="mono" value="${esc(s.timezone)}"></div>
+        <div class="field"><label for="sVoice">Istruzioni per la tua voce</label><textarea id="sVoice" placeholder="Per esempio: scrivo in italiano, tono diretto, frasi brevi, niente emoji né hashtag. Parlo di self-publishing a chi parte da zero.">${esc(s.voice_prompt)}</textarea><span class="help">Claude le segue ogni volta che genera, riscrive o suggerisce una risposta.</span></div>
+        <button class="btn" id="sSave">${icon("check")}Salva</button>
+      </section>
+      <section class="panel pad">
+        <div class="row" style="margin-bottom:12px"><h2 class="grow">Stato del collegamento</h2><button class="ghost" id="sTest">Verifica ora</button></div>
+        <div id="diag" class="list"><div class="item meta">${s.cookie_checked_at ? "Ultimo controllo del cookie: " + fmt(s.cookie_checked_at) + "." : "Mai verificato."} Il controllo si ripete da solo ogni 30 minuti.</div></div>
+        ${s.last_sync_error ? `<p class="err">Ultima sincronizzazione: ${esc(s.last_sync_error)}</p>` : ""}
+      </section>
+    </div>`;
+  $("#sSave").onclick = (e) => act(e.currentTarget, async () => {
     await api("/settings", "PUT", { handle: $("#sHandle").value, cookie: $("#sCookie").value || undefined, timezone: $("#sTz").value.trim(), slots: $("#sSlots").value.split(","), voice_prompt: $("#sVoice").value });
     toast("Impostazioni salvate"); render();
   });
-  $("#sTest").onclick = (e) => act(e.target, async () => {
+  $("#sTest").onclick = (e) => act(e.currentTarget, async () => {
+    $("#diag").innerHTML = skel(4, 40);
     const r = await api("/diagnostics");
-    $("#diag").innerHTML = `<div class="card"><table>${r.map((x) => `<tr><td>${x.ok ? "✅" : "❌"}</td><td>${esc(x.check)}</td><td class="meta">${esc(x.detail)}</td></tr>`).join("")}</table></div>`;
+    $("#diag").innerHTML = r.map((x, i) => `<div class="item row" style="--i:${i};padding:10px 2px"><span class="tag ${x.ok ? "ok" : "bad"}">${icon(x.ok ? "check" : "x")}</span><span>${esc(x.check)}</span><span class="grow"></span><span class="meta" style="text-align:right">${esc(x.detail)}</span></div>`).join("");
+    settings = await api("/settings"); drawStatus();
   });
 };
 
-api("/settings").then(showApp).catch(() => {});
+boot().catch(showLogin);
 </script>
 </body>
 </html>

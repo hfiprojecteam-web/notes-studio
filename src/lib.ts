@@ -72,6 +72,8 @@ export interface Settings {
   sid_enc: string;
   last_sync: string;
   last_sync_error: string;
+  cookie_ok: string; // "1" | "0" | "" (unknown)
+  cookie_checked_at: string;
 }
 
 const DEFAULTS: Settings = {
@@ -83,6 +85,8 @@ const DEFAULTS: Settings = {
   sid_enc: "",
   last_sync: "",
   last_sync_error: "",
+  cookie_ok: "",
+  cookie_checked_at: "",
 };
 
 export async function getSettings(env: Env): Promise<Settings> {

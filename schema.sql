@@ -58,3 +58,12 @@ CREATE TABLE IF NOT EXISTS activity (
   date INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'open'   -- open | done
 );
+
+-- Notes by other writers saved as a starting point for my own
+CREATE TABLE IF NOT EXISTS inspirations (
+  substack_id TEXT PRIMARY KEY,
+  handle TEXT NOT NULL,
+  name TEXT,
+  body TEXT NOT NULL,
+  saved_at INTEGER NOT NULL
+);

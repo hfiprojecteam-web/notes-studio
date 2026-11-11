@@ -98,3 +98,22 @@ export async function sync(env: Env, opts: { deep?: boolean } = {}) {
   await setSetting(env, "last_sync_error", errors.join("; "));
   return { myNotes: mine.length, checkedForReplies: recent.length, follows: follows.results.length, errors };
 }
+
+/** Records whether the saved session cookie still works. Only a sign-in refusal counts as broken. */
+export async function checkCookie(env: Env): Promise<boolean | null> {
+  const s = await getSettings(env);
+  const sid = await getSid(env, s);
+  let ok: boolean | null = null;
+  if (sid) {
+    try {
+      const me = await substack.whoAmI(sid);
+      ok = !s.user_id || !me.id || String(me.id) === s.user_id;
+    } catch (e) {
+      // A network hiccup or a rate limit says nothing about the cookie: leave the state unknown.
+      ok = e instanceof substack.SubstackError && (e.status === 401 || e.status === 403) ? false : null;
+    }
+  }
+  if (ok !== null || !sid) await setSetting(env, "cookie_ok", ok === null ? "" : ok ? "1" : "0");
+  await setSetting(env, "cookie_checked_at", String(Date.now()));
+  return ok;
+}

@@ -286,12 +286,52 @@
 <div id="toast"></div>
 
 <script>
+// ---------- language ----------
+// Italian is the source. Other languages are dictionaries keyed by the Italian text; numbers are matched as "#".
+const LOCALES = { it: "it-IT", en: "en-GB", de: "de-DE", es: "es-ES", ru: "ru-RU", fr: "fr-FR", hi: "hi-IN", pt: "pt-BR" };
+const LANG_NAMES = { it: "Italiano", en: "English", de: "Deutsch", es: "Español", ru: "Русский", fr: "Français", hi: "हिन्दी", pt: "Português (Brasil)" };
+let LANG = "it", DICT = null;
+try { LANG = localStorage.getItem("lang") || "it"; } catch {}
+function tr(text) {
+  if (!DICT || !text) return text;
+  const core = text.trim(); if (!core) return text;
+  let out = DICT[core];
+  if (out === undefined) {
+    const nums = []; const key = core.replace(/\d+(?:[.,]\d+)?/g, (m) => { nums.push(m); return "#"; });
+    const t = nums.length ? DICT[key] : undefined;
+    if (t !== undefined) { let i = 0; out = t.replace(/#/g, () => nums[i++] ?? ""); }
+  }
+  return out === undefined ? text : text.replace(core, out);
+}
+const NT = "[data-nt], .body, .x, .reader, .variant, textarea, pre, script, style";
+function translateTree(root) {
+  if (!DICT || !root) return;
+  if (root.nodeType === 3) { if (!root.parentElement?.closest(NT)) { const t = tr(root.nodeValue); if (t !== root.nodeValue) root.nodeValue = t; } return; }
+  if (root.nodeType !== 1 || root.closest(NT)) return;
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, { acceptNode: (n) => n.nodeType === 1 && n.matches(NT) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+  for (let n = root; n; n = w.nextNode()) {
+    if (n.nodeType === 3) { const t = tr(n.nodeValue); if (t !== n.nodeValue) n.nodeValue = t; }
+    else for (const a of ["placeholder", "title", "aria-label"]) if (n.hasAttribute?.(a)) { const v = n.getAttribute(a), t = tr(v); if (t !== v) n.setAttribute(a, t); }
+  }
+}
+async function setLang(l) {
+  LANG = l in LOCALES ? l : "it"; DICT = null; try { localStorage.setItem("lang", LANG); } catch {}
+  document.documentElement.lang = LOCALES[LANG].slice(0, 2);
+  if (LANG !== "it") { try { DICT = await (await fetch("/i18n/" + LANG)).json(); } catch { DICT = null; } }
+  translateTree(document.body);
+}
+new MutationObserver((ms) => { for (const m of ms) { if (m.type === "characterData") translateTree(m.target); else m.addedNodes.forEach(translateTree); } })
+  .observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+const _confirm = window.confirm.bind(window); window.confirm = (m) => _confirm(tr(m));
+
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const icon = (n) => `<svg class="i"><use href="#i-${n}"/></svg>`;
 let TZ = "Europe/Rome";
-const fmt = (ms, o) => ms ? new Date(ms).toLocaleString("it-IT", { timeZone: TZ, ...(o || { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) }) : "";
+const fmt = (ms, o) => ms ? new Date(ms).toLocaleString(LOCALES[LANG], { timeZone: TZ, ...(o || { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) }) : "";
+const nt = (x) => `<span data-nt>${esc(x)}</span>`;
+const F = (ms, o) => nt(fmt(ms, o));
 const hm = (ms) => fmt(ms, { hour: "2-digit", minute: "2-digit" });
 const toLocalInput = (ms) => { const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); };
 const skel = (n, h = 64) => Array.from({ length: n }, () => `<div class="skel" style="height:${h}px;margin-bottom:10px"></div>`).join("");
@@ -335,10 +375,11 @@ function drawStatus() {
     : s.cookie_ok === false ? ["bad", "Collegamento interrotto", "Reinserisci il cookie"]
     : s.cookie_ok === true ? ["ok", "Collegato", "@" + s.handle]
     : ["", "Da verificare", "@" + s.handle];
-  $("#status .dot").className = "dot " + cls; $("#statusText").textContent = text; $("#statusSub").textContent = sub;
+  $("#status .dot").className = "dot " + cls; $("#statusText").textContent = text; $("#statusSub").textContent = sub; $("#statusSub").toggleAttribute("data-nt", sub.startsWith("@"));
 }
 async function boot() {
   settings = await api("/settings"); TZ = settings.timezone;
+  if (settings.language !== LANG) await setLang(settings.language);
   $("#login").classList.add("hidden"); $("#app").classList.remove("hidden");
   drawNav(); drawStatus(); render();
   api("/activity").then((a) => drawNav({ activity: a.length || 0 })).catch(() => {});
@@ -366,7 +407,7 @@ views.studio = async (v) => {
   const drafts = by("draft"), sched = by("scheduled"), stuck = [...by("failed"), ...by("publishing")], pub = by("published");
   const slotOf = new Map(sched.map((n) => [n.scheduled_at, n]));
   const first = week.days[0], last = week.days[6];
-  const range = `${fmt(first.start, { day: "numeric", month: "short" })} – ${fmt(last.start, { day: "numeric", month: "short" })}`;
+  const range = `${F(first.start, { day: "numeric", month: "short" })} – ${F(last.start, { day: "numeric", month: "short" })}`;
 
   const dayHtml = (d, i) => {
     const used = new Set();
@@ -379,13 +420,13 @@ views.studio = async (v) => {
     const extra = sched.filter((n) => n.scheduled_at >= d.start && n.scheduled_at < d.end && !used.has(n.id))
       .map((n) => `<div class="slot full" draggable="true" data-id="${n.id}"><div class="t mono">${icon("clock")}${hm(n.scheduled_at)}</div><div class="x">${esc(n.body)}</div></div>`);
     return `<div class="day ${weekOffset === 0 && i === 0 ? "today" : ""}">
-      <div class="dname">${fmt(d.start, { weekday: "short" })}<b class="mono">${fmt(d.start, { day: "numeric" })}</b></div>
+      <div class="dname">${F(d.start, { weekday: "short" })}<b class="mono">${F(d.start, { day: "numeric" })}</b></div>
       <div class="slots">${cells.join("")}${extra.join("")}</div></div>`;
   };
   const draftHtml = (n, i) => `<div class="draft" ${n.reviewed ? 'draggable="true"' : ""} data-id="${n.id}" style="--i:${i}">
-      <span class="grip" title="${n.reviewed ? "Trascina su uno slot" : "Da riscrivere prima di programmare"}" ${n.reviewed ? "" : 'style="cursor:default;color:var(--accent)"'}>${icon(n.reviewed ? "grip" : "spark")}</span>
+      <span class="grip" title="${n.reviewed ? "Trascina su uno slot" : "Da approvare prima di programmare"}" ${n.reviewed ? "" : 'style="cursor:default;color:var(--accent)"'}>${icon(n.reviewed ? "grip" : "spark")}</span>
       <div class="grow"><div class="body clamp">${esc(n.body)}</div>
-        <div class="row meta" style="margin-top:6px">${n.status === "failed" ? '<span class="tag bad">Errore</span>' : ""}${n.status === "publishing" ? '<span class="tag bad">Bloccata</span>' : ""}${!n.reviewed ? `<span class="tag ok">Spunto di Claude · da riscrivere</span>` : n.source === "generated" ? `<span class="tag">nata da uno spunto</span>` : ""}<span class="mono">${n.body.length}</span></div>
+        <div class="row meta" style="margin-top:6px">${n.status === "failed" ? '<span class="tag bad">Errore</span>' : ""}${n.status === "publishing" ? '<span class="tag bad">Bloccata</span>' : ""}${!n.reviewed ? `<span class="tag ok">Spunto di Claude · da approvare</span>` : n.source === "generated" ? `<span class="tag">nata da uno spunto</span>` : ""}<span class="mono">${n.body.length}</span></div>
         ${n.error ? `<p class="err">${esc(n.error)}</p>` : ""}</div></div>`;
 
   v.innerHTML = `
@@ -400,7 +441,7 @@ views.studio = async (v) => {
         ${stuck.length ? `<div class="sec"><h2>Da controllare</h2><span class="n mono">${stuck.length}</span></div><div>${stuck.map(draftHtml).join("")}</div>` : ""}
         <div class="sec"><h2>Bozze</h2><span class="n mono">${drafts.length}</span><span class="grow"></span>${drafts.length ? `<button class="quiet" id="schedAll">${icon("clock")}Programma tutte</button>` : ""}</div>
         <div class="dropzone" id="draftZone">${drafts.map(draftHtml).join("") || empty("Nessuna bozza", "Scrivi qui sopra. Trascinando qui una Note programmata, torna bozza.")}</div>
-        ${pub.length ? `<div class="sec"><h2>Pubblicate da qui</h2><span class="n mono">${pub.length}</span></div><div class="list">${pub.slice(0, 12).map((n, i) => `<div class="item" style="--i:${i}"><div class="body clamp">${esc(n.body)}</div><div class="meta" style="margin-top:5px">${fmt(n.published_at)}</div></div>`).join("")}</div>` : ""}
+        ${pub.length ? `<div class="sec"><h2>Pubblicate da qui</h2><span class="n mono">${pub.length}</span></div><div class="list">${pub.slice(0, 12).map((n, i) => `<div class="item" style="--i:${i}"><div class="body clamp">${esc(n.body)}</div><div class="meta" style="margin-top:5px">${F(n.published_at)}</div></div>`).join("")}</div>` : ""}
       </section>
       <section class="panel week">
         <div class="week-head"><h2 class="grow" style="color:var(--ink);font-size:14.5px">${range}</h2>
@@ -418,7 +459,7 @@ views.studio = async (v) => {
     if (!bodies.length) throw new Error("Scrivi qualcosa prima");
     await api("/notes", "POST", { bodies });
     if (queue) await api("/notes/schedule", "POST", {});
-    toast(bodies.length === 1 ? (queue ? "Note in coda" : "Bozza salvata") : `${bodies.length} Notes ${queue ? "in coda" : "salvate"}`); render();
+    toast(bodies.length === 1 ? (queue ? "Note in coda" : "Bozza salvata") : (queue ? `${bodies.length} Notes in coda` : `${bodies.length} Notes salvate`)); render();
   });
   $("#addDraft").onclick = add(false); $("#addQueue").onclick = add(true);
   if ($("#schedAll")) $("#schedAll").onclick = (e) => act(e.currentTarget, async () => { const r = await api("/notes/schedule", "POST", {}); toast(`${r.scheduled} Notes programmate`); render(); });
@@ -446,7 +487,7 @@ function openEditor(n) {
   const d = $("#editor"), isNew = !n.id, locked = n.status === "published" || n.status === "publishing";
   d.innerHTML = `<form method="dialog" class="dlg">
     <div class="row"><h1 style="font-size:18px" class="grow">${isNew ? "Nuova Note" : "Modifica Note"}</h1><button class="quiet" value="close" title="Chiudi">${icon("x")}</button></div>
-    ${n.id && !n.reviewed ? `<p class="meta" style="margin:0;padding:10px 12px;background:var(--accent-soft);border-radius:10px;color:var(--accent)">Questo è uno spunto di Claude. Usalo come traccia e riscrivilo con parole tue: finché resta com'è non si può programmare né pubblicare.</p>` : ""}
+    ${n.id && !n.reviewed ? `<p class="meta" style="margin:0;padding:10px 12px;background:var(--accent-soft);border-radius:10px;color:var(--accent)">Questo è uno spunto di Claude. Riscrivilo con parole tue oppure approvalo così com'è: finché non lo fai non si può programmare né pubblicare.</p>` : ""}
     <textarea id="eBody" ${locked ? "readonly" : ""} placeholder="Scrivi la Note…">${esc(n.body)}</textarea>
     <div class="row"><span class="meta mono" id="eCount">${n.body.length}</span><span class="grow"></span>
       ${settings.ai_drafts ? `<span class="meta">Riscrivi:</span>
@@ -457,6 +498,7 @@ function openEditor(n) {
     <div class="field" style="margin:0"><label for="eWhen">Data e ora di pubblicazione</label>
       <input type="datetime-local" id="eWhen" value="${n.scheduled_at ? toLocalInput(n.scheduled_at) : ""}"><span class="help">Nell'orario di questo dispositivo. Lascia vuoto per tenerla tra le bozze.</span></div>
     <div class="row">
+      ${n.id && !n.reviewed ? `<button type="button" class="ghost" id="eApprove">${icon("check")}Approva così com'è</button>` : ""}
       ${isNew ? "" : `<button type="button" class="quiet danger" id="eDel">${icon("trash")}Elimina</button><button type="button" class="quiet" id="eNow">${icon("send")}Pubblica ora</button>`}
       <span class="grow"></span><button class="ghost" value="close">Annulla</button><button type="button" class="btn" id="eSave">${icon("check")}Salva</button></div>
   </form>`;
@@ -479,10 +521,13 @@ function openEditor(n) {
     else {
       // Save the text first, so a refusal to schedule an unrewritten suggestion never loses the edit.
       const r = await api("/notes/" + n.id, "PUT", { body: text });
-      if (when && !r.reviewed) { toast("Salvata, ma è ancora troppo simile allo spunto di Claude: riscrivila di più per programmarla"); return close(); }
+      if (when && !r.reviewed) { toast("Salvata. Per programmarla, approvala o riscrivila di più"); return close(); }
       if (when !== n.scheduled_at) await api("/notes/" + n.id, "PUT", { scheduled_at: when });
     }
-    toast(when ? "Programmata per " + fmt(when) : "Bozza salvata"); close();
+    toast(when ? tr("Programmata per") + " " + fmt(when) : "Bozza salvata"); close();
+  });
+  if ($("#eApprove", d)) $("#eApprove", d).onclick = (e) => act(e.currentTarget, async () => {
+    await api("/notes/" + n.id, "PUT", { body: body.value.trim() || n.body, approve: true }); toast("Approvata: ora puoi programmarla"); close();
   });
   if (!isNew) {
     $("#eDel", d).onclick = (e) => act(e.currentTarget, async () => { if (!confirm("Eliminare questa Note?")) return; await api("/notes/" + n.id, "DELETE"); close(); });
@@ -499,7 +544,7 @@ function openEditor(n) {
 views.generate = async (v) => {
   const st = await api("/stats?days=3650");
   v.innerHTML = `
-    <div class="head"><div><h1>Genera</h1><p class="lede">Dai a Claude un'idea, un articolo o il link di un post. Lui propone, tu scrivi: gli spunti arrivano nello Studio e diventano Notes solo dopo che li hai riscritti.</p></div></div>
+    <div class="head"><div><h1>Genera</h1><p class="lede">Dai a Claude un'idea, un articolo o il link di un post. Lui propone, tu decidi: gli spunti arrivano nello Studio e diventano Notes solo dopo che li hai riscritti o approvati.</p></div></div>
     <div class="two">
       <section>
         <div class="field"><label for="gTopic">Idea o tema</label><textarea id="gTopic" placeholder="Per esempio: perché la costanza batte il talento quando si scrive online"></textarea></div>
@@ -524,12 +569,12 @@ views.generate = async (v) => {
     </div>`;
   let gMode = "outline";
   $("#gMode").onclick = (e) => { const b = e.target.closest("[data-m]"); if (!b) return; gMode = b.dataset.m; $$("#gMode button").forEach((x) => x.classList.toggle("on", x === b));
-    $("#gModeHelp").textContent = gMode === "outline" ? "Per ogni idea: un angolo, un'apertura possibile e le domande a cui rispondi tu. Il testo lo scrivi tu." : "Testi completi nella tua voce, da usare come base. Non si possono programmare finché non li hai riscritti in buona parte."; };
+    $("#gModeHelp").textContent = gMode === "outline" ? "Per ogni idea: un angolo, un'apertura possibile e le domande a cui rispondi tu. Il testo lo scrivi tu." : "Testi completi nella tua voce, da usare come base. Li programmi dopo averli riscritti o approvati."; };
   $("#gGo").onclick = (e) => act(e.currentTarget, async () => {
     $("#gMsg").innerHTML = `<p class="meta">Sto scrivendo. Può volerci fino a un minuto.</p>${skel(3, 70)}`;
     try {
       const r = await api("/generate", "POST", { topic: $("#gTopic").value, source_url: $("#gUrl").value, source_text: $("#gText").value, count: +$("#gCount").value, mode: gMode });
-      toast(`${r.created} spunti nelle bozze, da riscrivere`); go("studio");
+      toast(`${r.created} spunti nelle bozze, da approvare`); go("studio");
     } finally { if ($("#gMsg")) $("#gMsg").innerHTML = ""; }
   });
 };
@@ -555,9 +600,7 @@ views.voice = async (v) => {
       <button class="btn" id="vSave">${icon("check")}Salva profilo</button></div>
     <div class="two">
       <section>
-        <div class="group" style="border-top:0;padding-top:0"><h2>Lingua</h2><p>La lingua in cui vengono scritte bozze, riscritture e risposte.</p>
-          <div class="field" style="max-width:340px;margin:0">${sel("vLang", d.languages, p.language, VOICE.langs)}</div></div>
-        <div class="group"><h2>Chi sei e per chi scrivi</h2><p>Il contesto che un bravo ghostwriter chiederebbe al primo incontro.</p>
+        <div class="group" style="border-top:0;padding-top:0"><h2>Chi sei e per chi scrivi</h2><p>Il contesto che un bravo ghostwriter chiederebbe al primo incontro.</p>
           ${area("vAbout", "Chi sei", p.about, "Autore di guide pratiche, pubblico in self-publishing da tre anni…")}
           ${area("vAudience", "A chi parli", p.audience, "Chi vuole pubblicare il primo libro e non sa da dove partire…")}
           ${area("vTopics", "Di cosa scrivi", p.topics, "Self-publishing, scrittura, piccoli business digitali…", "I tuoi temi ricorrenti, anche quelli che non tratti mai.")}</div>
@@ -595,7 +638,7 @@ views.voice = async (v) => {
   const picked = (name) => $$(`[data-chips="${name}"] .chip.on`, v).map((c) => c.textContent);
   const countSamples = () => { const n = $$(".sample", v).reduce((a, t) => a + t.value.length, 0); $("#vSampleCount").textContent = `${n} / 40000 caratteri`; };
   countSamples();
-  const collect = () => ({ language: $("#vLang").value, about: $("#vAbout").value, audience: $("#vAudience").value, topics: $("#vTopics").value, tones: picked("tones"), structure: picked("structure"),
+  const collect = () => ({ about: $("#vAbout").value, audience: $("#vAudience").value, topics: $("#vTopics").value, tones: picked("tones"), structure: picked("structure"),
     length: $("#vLength").value, person: $("#vPerson").value, address: $("#vAddress").value, emoji: $("#vEmoji").value, hashtags: $("#vHash").value,
     use_words: $("#vUse").value, avoid_words: $("#vAvoid").value, cta: $("#vCta").value, portrait: $("#vPortrait").value, samples: $$(".sample", v).map((t) => t.value.trim()).filter(Boolean) });
   const save = async () => { await api("/voice", "PUT", collect()); settings = await api("/settings"); };
@@ -641,8 +684,8 @@ views.materials = async (v) => {
     <div class="head"><div><h1>Materiali</h1><p class="lede">Ricerche, brief e appunti scritti altrove, da tenere sott'occhio mentre lavori. Qui si leggono soltanto: l'app non li usa per generare testi.</p></div>
       <button class="btn" id="mNew">${icon("plus")}Aggiungi materiale</button></div>
     <div class="two" style="grid-template-columns:minmax(0,2fr) minmax(0,5fr)">
-      <section>${list.map((m) => `<div class="mat ${m.id === matOpen ? "on" : ""}" data-mat="${m.id}"><b style="font-weight:500">${esc(m.title)}</b><div class="meta mono">${fmt(m.created_at, { day: "numeric", month: "short", year: "numeric" })} · ${Math.round(m.size / 1000)}k caratteri</div></div>`).join("") || empty("Nessun materiale", "Incolla un testo o carica un file .md o .txt.")}</section>
-      <section>${cur ? `<div class="row" style="margin-bottom:6px"><h2 class="grow">${esc(cur.source || "Senza fonte indicata")}</h2><button class="quiet danger" id="mDel">${icon("trash")}Elimina</button></div><h1 style="font-size:22px;margin-bottom:14px">${esc(cur.title)}</h1><div class="reader">${md(cur.body)}</div>` : ""}</section>
+      <section>${list.map((m) => `<div class="mat ${m.id === matOpen ? "on" : ""}" data-mat="${m.id}"><b style="font-weight:500" data-nt>${esc(m.title)}</b><div class="meta mono">${F(m.created_at, { day: "numeric", month: "short", year: "numeric" })} · ${Math.round(m.size / 1000)}k caratteri</div></div>`).join("") || empty("Nessun materiale", "Incolla un testo o carica un file .md o .txt.")}</section>
+      <section>${cur ? `<div class="row" style="margin-bottom:6px"><h2 class="grow" ${cur.source ? "data-nt" : ""}>${esc(cur.source || "Senza fonte indicata")}</h2><button class="quiet danger" id="mDel">${icon("trash")}Elimina</button></div><h1 style="font-size:22px;margin-bottom:14px" data-nt>${esc(cur.title)}</h1><div class="reader">${md(cur.body)}</div>` : ""}</section>
     </div>`;
   v.onclick = (e) => { const m = e.target.closest("[data-mat]"); if (m) { matOpen = +m.dataset.mat; render(); } };
   if ($("#mDel")) $("#mDel").onclick = (e) => act(e.currentTarget, async () => { if (!confirm("Eliminare questo materiale?")) return; await api("/materials/" + matOpen, "DELETE"); matOpen = null; render(); });
@@ -682,7 +725,7 @@ views.stats = async (v) => {
   const wd = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], wdIt = { Mon: "Lun", Tue: "Mar", Wed: "Mer", Thu: "Gio", Fri: "Ven", Sat: "Sab", Sun: "Dom" };
   const avg = d.total ? ((d.likes + d.restacks + d.replies) / d.total).toFixed(1) : "0";
   v.innerHTML = `
-    <div class="head"><div><h1>Statistiche</h1><p class="lede">Interazioni pubbliche delle tue Notes. ${d.last_sync ? "Aggiornate " + fmt(d.last_sync) + "." : "Mai sincronizzate."}</p></div>
+    <div class="head"><div><h1>Statistiche</h1><p class="lede">Interazioni pubbliche delle tue Notes. ${d.last_sync ? `<span>Aggiornate</span> ${F(d.last_sync)}.` : "Mai sincronizzate."}</p></div>
       <select id="days" class="auto">${[30, 90, 365, 3650].map((x) => `<option value="${x}" ${x === statDays ? "selected" : ""}>${x === 3650 ? "Da sempre" : "Ultimi " + x + " giorni"}</option>`).join("")}</select>
       <button class="ghost" id="syncNow">${icon("repeat")}Aggiorna i miei dati</button><button class="quiet" id="syncDeep" title="Scarica anche le Notes più vecchie">Importa storico</button></div>
     ${trendHtml}
@@ -693,7 +736,7 @@ views.stats = async (v) => {
       <div class="metric"><b>${d.brought.follows}</b><span class="meta">nuovi follower</span></div>
       <div class="metric"><b>${d.brought.clicks}</b><span class="meta">clic sui link</span></div>
     </div>
-    ${d.by_result.length ? `<div class="list" style="margin:-14px 0 30px">${d.by_result.map((n, i) => `<div class="item" style="--i:${i}"><div class="body clamp">${esc(n.body)}</div><div class="row meta mono" style="margin-top:6px;gap:14px"><span>${n.free_subs} gratuiti</span><span>${n.paid_subs} a pagamento</span><span>${n.follows} follower</span><span>${n.clicks} clic</span><span>${fmt(n.date, { day: "numeric", month: "short" })}</span></div></div>`).join("")}</div>` : ""}` : ""}
+    ${d.by_result.length ? `<div class="list" style="margin:-14px 0 30px">${d.by_result.map((n, i) => `<div class="item" style="--i:${i}"><div class="body clamp">${esc(n.body)}</div><div class="row meta mono" style="margin-top:6px;gap:14px"><span>${n.free_subs} gratuiti</span><span>${n.paid_subs} a pagamento</span><span>${n.follows} follower</span><span>${n.clicks} clic</span><span>${F(n.date, { day: "numeric", month: "short" })}</span></div></div>`).join("")}</div>` : ""}` : ""}
     <div id="sources" style="margin-bottom:30px"></div>
     ${d.total ? `
     <div class="metrics">
@@ -708,7 +751,7 @@ views.stats = async (v) => {
     </div>
     <div class="sec"><h2>Le tue Notes migliori</h2></div>
     <div class="list">${d.top.map((n, i) => `<div class="item" style="--i:${i}"><div class="body">${esc(n.body)}</div>
-      <div class="row" style="margin-top:9px">${counts(n)}<span class="meta">${fmt(n.date)}</span><span class="grow"></span>
+      <div class="row" style="margin-top:9px">${counts(n)}<span class="meta">${F(n.date)}</span><span class="grow"></span>
         <button class="quiet" data-reuse="${n.substack_id}">${icon("plus")}Riusa come bozza</button><a class="quiet" href="https://substack.com/note/c-${n.substack_id}" target="_blank" rel="noopener">${icon("ext")}Apri</a></div></div>`).join("")}</div>`
     : empty("Nessuna Note in questo periodo", "Premi Importa storico per scaricare le tue Notes da Substack, oppure allarga il periodo.")}`;
   $("#days").onchange = (e) => { statDays = +e.target.value; render(); };
@@ -734,8 +777,8 @@ views.activity = async (v) => {
     <div class="head"><div><h1>Attività</h1><p class="lede">Risposte alle tue Notes degli ultimi 14 giorni ancora senza replica. <kbd>J</kbd> <kbd>K</kbd> per scorrere, <kbd>R</kbd> per rispondere, <kbd>E</kbd> per archiviare. Le nuove risposte vengono lette una volta al giorno.</p></div></div>
     <div class="list" style="max-width:820px">${items.map((a, i) => `
       <div class="item act" data-id="${a.reply_id}" style="--i:${i}">
-        <div class="meta clamp" style="-webkit-line-clamp:1">Sulla tua Note: ${esc(a.note_body || "")}</div>
-        <p style="margin:8px 0 4px"><b style="font-weight:600">${esc(a.author_name || a.author_handle || "Qualcuno")}</b> <span class="meta">${fmt(a.date)}</span></p>
+        <div class="meta clamp" style="-webkit-line-clamp:1"><span>Sulla tua Note:</span> ${nt(a.note_body || "")}</div>
+        <p style="margin:8px 0 4px"><b style="font-weight:600" data-nt>${esc(a.author_name || a.author_handle || "Qualcuno")}</b> <span class="meta">${F(a.date)}</span></p>
         <div class="body">${esc(a.body)}</div>
         <div class="row" style="margin-top:12px"><input class="grow reply" placeholder="Scrivi una risposta…">
           ${settings.ai_drafts ? `<button class="ghost" data-a="suggest" title="Suggerisci una risposta">${icon("wand")}Suggerisci</button>` : ""}<button class="btn" data-a="reply">${icon("send")}Rispondi</button>
@@ -774,13 +817,13 @@ views.people = async (v) => {
   const stateLabel = (x) => x.founding ? "fondatore" : x.state === "subscribed" ? "a pagamento" : x.state === "free_signup" ? "" : x.state.replace(/_/g, " ");
   const row = (p, i) => `<div class="item person" data-id="${p.user_id}" style="--i:${Math.min(i, 14)}">
       ${p.photo_url ? `<img class="avatar" src="${esc(p.photo_url)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="avatar">${esc((p.name || "?")[0])}</span>`}
-      <div><b style="font-weight:600">${esc(p.name || p.handle || "Senza nome")}</b>${p.handle ? ` <a class="meta" href="https://substack.com/@${esc(p.handle)}" target="_blank" rel="noopener">@${esc(p.handle)}</a>` : ""}
-        <div class="meta">${p.publication ? esc(p.publication) : "Nessuna pubblicazione"}</div>
+      <div><b style="font-weight:600" data-nt>${esc(p.name || p.handle || "Senza nome")}</b>${p.handle ? ` <a class="meta" data-nt href="https://substack.com/@${esc(p.handle)}" target="_blank" rel="noopener">@${esc(p.handle)}</a>` : ""}
+        <div class="meta">${p.publication ? nt(p.publication) : "Nessuna pubblicazione"}</div>
         <div class="row meta mono" style="margin-top:6px;gap:12px">${p.followers != null ? `<span>${p.followers} follower</span>` : ""}${p.subscribers ? `<span>${esc(p.subscribers)} iscritti</span>` : ""}</div>
-        <div class="row" style="margin-top:6px">${p.interactions ? `<span class="tag">${p.interactions} ${p.interactions === 1 ? "risposta" : "risposte"}</span>` : ""}${p.waiting ? `<span class="tag ok">${p.waiting} in attesa</span>` : ""}${p.last_interaction ? `<span class="meta">ultima ${fmt(p.last_interaction, { day: "numeric", month: "short" })}</span>` : ""}</div></div>
+        <div class="row" style="margin-top:6px">${p.interactions ? `<span class="tag">${p.interactions} ${p.interactions === 1 ? "risposta" : "risposte"}</span>` : ""}${p.waiting ? `<span class="tag ok">${p.waiting} in attesa</span>` : ""}${p.last_interaction ? `<span class="meta">ultima ${F(p.last_interaction, { day: "numeric", month: "short" })}</span>` : ""}</div></div>
       <div><h2 style="margin-bottom:6px">Iscritto a${p.subscriptions ? ` <span class="mono">${p.subscriptions.length}${p.subs_truncated ? "+" : ""}</span>` : ""}</h2>
         ${p.subscriptions == null ? `<span class="meta">${p.handle ? "Non ancora letto: si aggiorna alla prossima sincronizzazione." : "Profilo non ancora identificato: ci riprova alla prossima sincronizzazione."}</span>`
-          : p.subscriptions.length ? `<div class="subs">${p.subscriptions.slice(0, 14).map((x) => `<span class="tag ${stateLabel(x) ? "ok" : ""}" title="${esc(x.state)}">${esc(x.name)}${stateLabel(x) ? " · " + esc(stateLabel(x)) : ""}</span>`).join("")}${p.subscriptions.length > 14 ? `<span class="meta">e altre ${p.subscriptions.length - 14}</span>` : ""}</div>`
+          : p.subscriptions.length ? `<div class="subs">${p.subscriptions.slice(0, 14).map((x) => `<span class="tag ${stateLabel(x) ? "ok" : ""}" title="${esc(x.state)}" data-nt>${esc(x.name)}${stateLabel(x) ? " · " + esc(tr(stateLabel(x))) : ""}</span>`).join("")}${p.subscriptions.length > 14 ? `<span class="meta">e altre ${p.subscriptions.length - 14}</span>` : ""}</div>`
           : '<span class="meta">Nessun abbonamento pubblico.</span>'}</div>
       <div class="row"><select class="auto" data-tag aria-label="Etichetta"><option value="">Senza etichetta</option>${d.tags.map((t) => `<option ${p.tag === t ? "selected" : ""}>${t}</option>`).join("")}</select>
         <button class="quiet danger" data-del title="Rimuovi">${icon("x")}</button></div></div>`;
@@ -791,7 +834,7 @@ views.people = async (v) => {
     <div class="list">${list.map(row).join("")}</div>
     ${list.length ? "" : empty(peopleFilter ? "Nessuno con questa etichetta" : "Ancora nessuno", "Qui compare chi risponde alle tue Notes. Puoi anche cercare qualsiasi profilo Substack con il campo in alto: vedrai il suo pubblico e i suoi abbonamenti pubblici.")}
     <p class="meta" style="margin-top:16px;max-width:70ch">Substack mostra solo gli abbonamenti che ciascuno ha scelto di tenere pubblici, e il numero di iscritti solo arrotondato. In verde gli abbonamenti a pagamento.</p>`;
-  $("#pAdd").onclick = (e) => act(e.currentTarget, async () => { const r = await api("/people", "POST", { handle: $("#pHandle").value }); toast("Aggiunto " + (r.name || "")); render(); });
+  $("#pAdd").onclick = (e) => act(e.currentTarget, async () => { const r = await api("/people", "POST", { handle: $("#pHandle").value }); toast(tr("Aggiunto") + " " + (r.name || "")); render(); });
   v.onclick = (e) => {
     const f = e.target.closest("[data-pf]"); if (f) { peopleFilter = f.dataset.pf; return render(); }
     const del = e.target.closest("[data-del]"); if (del) act(del, async () => { await api("/people/" + del.closest(".person").dataset.id, "DELETE"); render(); });
@@ -806,28 +849,28 @@ views.feed = async (v) => {
   const tabs = `<div class="tabs"><button data-ft="follows" class="${feedTab === "follows" ? "on" : ""}">Creator seguiti</button><button data-ft="insp" class="${feedTab === "insp" ? "on" : ""}">Ispirazioni <span class="mono">${insp.length}</span></button></div>`;
   const followsHtml = `
     <div class="two"><section>
-      <div class="list">${d.feed.map((n, i) => `<div class="item" style="--i:${Math.min(i, 12)}"><p style="margin:0 0 5px"><b style="font-weight:600">${esc(n.name || n.handle)}</b> <span class="meta">${fmt(n.date)}</span></p><div class="body">${esc(n.body)}</div>
+      <div class="list">${d.feed.map((n, i) => `<div class="item" style="--i:${Math.min(i, 12)}"><p style="margin:0 0 5px"><b style="font-weight:600" data-nt>${esc(n.name || n.handle)}</b> <span class="meta">${F(n.date)}</span></p><div class="body">${esc(n.body)}</div>
         <div class="row" style="margin-top:9px">${counts(n)}<span class="grow"></span>
           <button class="quiet" data-save="${n.substack_id}" ${n.saved ? "disabled" : ""}>${icon("bookmark")}${n.saved ? "Salvata" : "Salva come ispirazione"}</button>
           <a class="quiet" href="https://substack.com/note/c-${n.substack_id}" target="_blank" rel="noopener">${icon("ext")}Rispondi su Substack</a></div></div>`).join("")}</div>
       ${d.feed.length ? "" : empty("Il feed è vuoto", "Aggiungi un creator qui accanto per vedere le sue ultime Notes.")}
     </section>
-    <section class="panel pad"><h2 style="margin-bottom:12px">Chi segui <span class="mono">${d.follows.length}/20</span></h2>
+    <section class="panel pad"><h2 style="margin-bottom:12px">Chi segui <span class="mono">${d.follows.length}/10</span></h2>
       <div class="row" style="margin-bottom:12px"><input id="fHandle" class="grow" placeholder="@handle o link al profilo"><button class="btn" id="fAdd">${icon("plus")}Aggiungi</button></div>
-      <div class="list">${d.follows.map((f) => `<div class="item row" style="padding:9px 2px"><span class="grow">${esc(f.name || f.handle)}<span class="meta"> @${esc(f.handle)}</span></span><button class="quiet danger" data-rm="${esc(f.handle)}" title="Smetti di seguire">${icon("x")}</button></div>`).join("")}</div>
+      <div class="list">${d.follows.map((f) => `<div class="item row" style="padding:9px 2px"><span class="grow" data-nt>${esc(f.name || f.handle)}<span class="meta"> @${esc(f.handle)}</span></span><button class="quiet danger" data-rm="${esc(f.handle)}" title="Smetti di seguire">${icon("x")}</button></div>`).join("")}</div>
     </section></div>`;
-  const inspHtml = `<div class="list" style="max-width:820px">${insp.map((n, i) => `<div class="item" style="--i:${i}"><p style="margin:0 0 5px"><b style="font-weight:600">${esc(n.name || n.handle)}</b> <span class="meta">salvata ${fmt(n.saved_at, { day: "numeric", month: "short" })}</span></p><div class="body">${esc(n.body)}</div>
+  const inspHtml = `<div class="list" style="max-width:820px">${insp.map((n, i) => `<div class="item" style="--i:${i}"><p style="margin:0 0 5px"><b style="font-weight:600" data-nt>${esc(n.name || n.handle)}</b> <span class="meta">salvata ${F(n.saved_at, { day: "numeric", month: "short" })}</span></p><div class="body">${esc(n.body)}</div>
       <div class="row" style="margin-top:9px">${settings.ai_drafts ? `<button class="ghost" data-remix="${n.substack_id}">${icon("spark")}Scrivi 3 bozze mie da questo spunto</button>` : ""}<span class="grow"></span><button class="quiet danger" data-unsave="${n.substack_id}">${icon("trash")}Rimuovi</button></div></div>`).join("")}</div>
     ${insp.length ? "" : empty("Nessuna ispirazione salvata", "Dal feed dei creator seguiti, salva le Notes che funzionano: Claude ne riprende l'idea e la forma, non le frasi.")}`;
   v.innerHTML = `<div class="head"><div><h1>Feed</h1><p class="lede">Le ultime Notes di chi vuoi seguire da vicino, e gli spunti che hai messo da parte.</p></div>${tabs}</div>${feedTab === "follows" ? followsHtml : inspHtml}`;
-  if ($("#fAdd")) $("#fAdd").onclick = (e) => act(e.currentTarget, async () => { const r = await api("/follows", "POST", { handle: $("#fHandle").value }); toast("Ora segui " + (r.name || "")); render(); });
+  if ($("#fAdd")) $("#fAdd").onclick = (e) => act(e.currentTarget, async () => { const r = await api("/follows", "POST", { handle: $("#fHandle").value }); toast(tr("Ora segui") + " " + (r.name || "")); render(); });
   v.onclick = (e) => {
     const b = e.target.closest("button"); if (!b) return; const ds = b.dataset;
     if (ds.ft) { feedTab = ds.ft; return render(); }
     if (ds.rm) act(b, async () => { await api("/follows/" + encodeURIComponent(ds.rm), "DELETE"); render(); });
     if (ds.save) act(b, async () => { await api("/inspirations", "POST", { substack_id: ds.save }); toast("Salvata tra le ispirazioni"); render(); });
     if (ds.unsave) act(b, async () => { await api("/inspirations/" + ds.unsave, "DELETE"); render(); });
-    if (ds.remix) act(b, async () => { toast("Sto scrivendo, può volerci un minuto"); const r = await api(`/inspirations/${ds.remix}/remix`, "POST"); toast(`${r.created} spunti nelle bozze, da riscrivere`); go("studio"); });
+    if (ds.remix) act(b, async () => { toast("Sto scrivendo, può volerci un minuto"); const r = await api(`/inspirations/${ds.remix}/remix`, "POST"); toast(`${r.created} spunti nelle bozze, da approvare`); go("studio"); });
   };
 };
 
@@ -841,22 +884,23 @@ views.settings = async (v) => {
     <div class="head"><div><h1>Impostazioni</h1><p class="lede">Collegamento a Substack, orari di pubblicazione e voce.</p></div></div>
     <div class="two">
       <section>
+        <div class="field"><label for="sLang">Lingua</label><select id="sLang" data-nt>${Object.entries(LANG_NAMES).map(([k, n]) => `<option value="${k}" ${k === s.language ? "selected" : ""}>${n}</option>`).join("")}</select><span class="help">Vale per tutta l'app: interfaccia, date e testi proposti da Claude.</span></div>
         <div class="field"><label for="sHandle">Il tuo handle Substack</label><input id="sHandle" value="${esc(s.handle)}" placeholder="nomeutente"><span class="help">Quello che compare in substack.com/@nomeutente, senza la chiocciola.</span></div>
         <div class="field"><label for="sCookie">Cookie di sessione Substack</label><input id="sCookie" type="password" autocomplete="off" placeholder="${s.has_cookie ? "Già salvato. Compila solo per sostituirlo" : "Incolla il valore di substack.sid"}">
           <span class="help">Su substack.com da loggato: F12, Application, Cookies, riga substack.sid. Viene salvato cifrato e non è più mostrato. Chi lo possiede può agire come te.</span></div>
         <div class="field"><label for="sSlots">Slot di pubblicazione giornalieri</label><input id="sSlots" class="mono" value="${esc(s.slots.join(", "))}"><span class="help">Orari nel formato HH:MM, separati da virgola.</span></div>
-        <div class="field"><label for="sTz">Fuso orario</label><select id="sTz">${zones.map((z) => `<option ${z === s.timezone ? "selected" : ""}>${z}</option>`).join("")}</select><span class="help">Gli slot e le statistiche usano questo fuso.</span></div>
+        <div class="field"><label for="sTz">Fuso orario</label><select id="sTz" data-nt>${zones.map((z) => `<option ${z === s.timezone ? "selected" : ""}>${z}</option>`).join("")}</select><span class="help">Gli slot e le statistiche usano questo fuso.</span></div>
         <button class="btn" id="sSave">${icon("check")}Salva</button>
       </section>
       <section class="panel pad">
         <div class="row" style="margin-bottom:12px"><h2 class="grow">Stato del collegamento</h2><button class="ghost" id="sTest">Verifica ora</button></div>
-        <div id="diag" class="list"><div class="item meta">${s.cookie_checked_at ? "Ultimo controllo del cookie: " + fmt(s.cookie_checked_at) + "." : "Mai verificato."} Il controllo si ripete da solo ogni 3-5 ore.</div></div>
+        <div id="diag" class="list"><div class="item meta">${s.cookie_checked_at ? `<span>Ultimo controllo del cookie:</span> ${F(s.cookie_checked_at)}.` : "Mai verificato."} <span>Il controllo si ripete da solo ogni 3-5 ore.</span></div></div>
         ${s.last_sync_error ? `<p class="err">Ultima sincronizzazione: ${esc(s.last_sync_error)}</p>` : ""}
         <div class="sec"><h2 class="grow">Protezione</h2></div>
         <label class="switch"><input type="checkbox" id="sPaused" ${s.paused ? "checked" : ""}><div><b>Pausa totale</b><span>Ferma pubblicazione programmata e ogni lettura automatica. Le Notes in coda restano dove sono.</span></div></label>
-        <label class="switch"><input type="checkbox" id="sAi" ${s.ai_drafts ? "checked" : ""}><div><b>Aiuto di Claude nella scrittura</b><span>Claude propone tracce, riscritture e risposte; pubblichi solo ciò che hai riscritto tu. Spenta, le sezioni Genera e Voce spariscono.</span></div></label>
+        <label class="switch"><input type="checkbox" id="sAi" ${s.ai_drafts ? "checked" : ""}><div><b>Aiuto di Claude nella scrittura</b><span>Claude propone tracce, riscritture e risposte; esce solo ciò che hai riscritto o approvato tu. Spenta, le sezioni Genera e Voce spariscono.</span></div></label>
         <div class="item meta" style="border:0">Contenuti di altri (risposte, creator seguiti, profili): letti una volta al giorno, a un orario casuale tra le 7 e le 22, con pause tra una richiesta e l'altra.
-          ${s.last_others_sync ? ` Ultima lettura ${fmt(s.last_others_sync)}.` : ""}${s.next_others_sync ? ` Prossima ${fmt(s.next_others_sync)}.` : ""}
+          ${s.last_others_sync ? ` Ultima lettura ${F(s.last_others_sync)}.` : ""}${s.next_others_sync ? ` Prossima ${F(s.next_others_sync)}.` : ""}
           Le Notes programmate escono fino a 6 minuti dopo lo slot, mai al minuto esatto.</div>
         <div class="sec"><h2 class="grow">Esplorazione</h2><button class="ghost" id="sExplore">Esplora endpoint</button></div>
         <p class="meta">Prova, in sola lettura, gli indirizzi interni di Substack che servirebbero alle prossime funzioni (articoli, restack, iscritti). Salva solo la forma delle risposte, mai i valori.</p>
@@ -864,7 +908,8 @@ views.settings = async (v) => {
       </section>
     </div>`;
   $("#sSave").onclick = (e) => act(e.currentTarget, async () => {
-    await api("/settings", "PUT", { handle: $("#sHandle").value, cookie: $("#sCookie").value || undefined, timezone: $("#sTz").value, slots: $("#sSlots").value.split(",") });
+    await api("/settings", "PUT", { language: $("#sLang").value, handle: $("#sHandle").value, cookie: $("#sCookie").value || undefined, timezone: $("#sTz").value, slots: $("#sSlots").value.split(",") });
+    const fresh = await api("/settings"); if (fresh.language !== LANG) { await setLang(fresh.language); settings = fresh; drawNav(); drawStatus(); }
     toast("Impostazioni salvate"); render();
   });
   for (const [id, key, msg] of [["#sPaused", "paused", ["Pausa attivata", "Pausa tolta"]], ["#sAi", "ai_drafts", ["Aiuto di Claude attivato", "Aiuto di Claude disattivato"]]]) {
@@ -885,7 +930,7 @@ views.settings = async (v) => {
   });
 };
 
-boot().catch(showLogin);
+setLang(LANG).then(() => boot().catch(showLogin));
 </script>
 </body>
 </html>

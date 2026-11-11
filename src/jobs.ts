@@ -117,7 +117,7 @@ export async function sync(env: Env, opts: { deep?: boolean; others?: boolean } 
 
   // 3. Latest notes of the creators I follow
   const follows = others
-    ? await env.DB.prepare("SELECT handle, user_id FROM follows ORDER BY added_at LIMIT 20").all<{ handle: string; user_id: number }>()
+    ? await env.DB.prepare("SELECT handle, user_id FROM follows ORDER BY added_at LIMIT 10").all<{ handle: string; user_id: number }>()
     : { results: [] as { handle: string; user_id: number }[] };
   const errors: string[] = [];
   for (const f of follows.results) {

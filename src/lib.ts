@@ -82,6 +82,7 @@ export interface Settings {
   last_others_sync: string;
   last_manual_sync: string;
   pub_subdomain: string;
+  language: string; // interface and writing language: it, en, de, es, ru, fr, hi, pt
 }
 
 const DEFAULTS: Settings = {
@@ -103,6 +104,7 @@ const DEFAULTS: Settings = {
   last_others_sync: "",
   last_manual_sync: "",
   pub_subdomain: "",
+  language: "it",
 };
 
 export async function getSettings(env: Env): Promise<Settings> {

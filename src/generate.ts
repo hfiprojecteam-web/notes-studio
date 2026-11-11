@@ -131,7 +131,7 @@ export function generateOutlines(
   if (input.sourceText?.trim()) parts.push(`<source_article title="${input.sourceTitle ?? ""}">\n${input.sourceText.trim()}\n</source_article>`);
   if (input.topic?.trim()) parts.push(`<idea>\n${input.topic.trim()}\n</idea>`);
   parts.push(
-    `The writer wants to write these Notes personally and needs starting points, not finished text. Propose ${input.count} different angles${input.sourceText ? " found in the source article" : ""}${input.topic ? " on the idea above" : ""}. For each one return a single item with exactly this layout, written in the writer's language:\nANGOLO: the angle in a few words\nAPERTURA POSSIBILE: one opening line they could adapt\nDA SCRIVERE TU: two or three short questions or prompts, each on its own line starting with "- ", that only the writer can answer from their own experience or opinion\nDo not write the body of the Note.`,
+    `The writer wants to write these Notes personally and needs starting points, not finished text. Propose ${input.count} different angles${input.sourceText ? " found in the source article" : ""}${input.topic ? " on the idea above" : ""}. For each one return a single item with exactly this layout, with the three labels translated into the language you are writing in:\nANGLE: the angle in a few words\nPOSSIBLE OPENING: one opening line they could adapt\nFOR YOU TO WRITE: two or three short questions or prompts, each on its own line starting with "- ", that only the writer can answer from their own experience or opinion\nDo not write the body of the Note.`,
   );
   return askList(apiKey, WRITER, parts.join("\n\n"));
 }

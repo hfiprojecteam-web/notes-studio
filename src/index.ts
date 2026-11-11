@@ -6,6 +6,26 @@ import { EMPTY_PROFILE, Voice, VoiceProfile, analyzeVoice, composeVoice, generat
 import * as substack from "./substack";
 import page from "../public/index.html";
 
+import en from "../i18n/en.json";
+import de from "../i18n/de.json";
+import es from "../i18n/es.json";
+import ru from "../i18n/ru.json";
+import fr from "../i18n/fr.json";
+import hi from "../i18n/hi.json";
+import pt from "../i18n/pt.json";
+
+/** Interface languages. Italian is the source text; the others are dictionaries keyed by the Italian string. */
+const UI_LANGS: Record<string, { name: string; dict: Record<string, string> | null }> = {
+  it: { name: "Italian", dict: null },
+  en: { name: "English", dict: en },
+  de: { name: "German", dict: de },
+  es: { name: "Spanish", dict: es },
+  ru: { name: "Russian", dict: ru },
+  fr: { name: "French", dict: fr },
+  hi: { name: "Hindi", dict: hi },
+  pt: { name: "Brazilian Portuguese", dict: pt },
+};
+
 const app = new Hono<{ Bindings: Env }>();
 
 app.onError((err, c) => {
@@ -19,6 +39,12 @@ app.use("*", async (c, next) => {
 });
 
 app.get("/", (c) => c.html(page, 200, { "Cache-Control": "no-cache", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer" }));
+
+// Dictionaries are public: the login page needs them before anyone has signed in.
+app.get("/i18n/:lang", (c) => {
+  const l = UI_LANGS[c.req.param("lang")];
+  return l?.dict ? c.json(l.dict, 200, { "Cache-Control": "public, max-age=300" }) : c.json({}, 404);
+});
 
 // ---------- auth ----------
 
@@ -55,6 +81,7 @@ app.get("/api/settings", async (c) => {
     last_sync_error: s.last_sync_error,
     cookie_ok: s.cookie_ok === "" ? null : s.cookie_ok === "1",
     cookie_checked_at: s.cookie_checked_at ? Number(s.cookie_checked_at) : null,
+    language: s.language,
     paused: s.paused === "1",
     ai_drafts: s.ai_drafts !== "0",
     next_others_sync: s.next_others_sync ? Number(s.next_others_sync) : null,
@@ -63,7 +90,7 @@ app.get("/api/settings", async (c) => {
 });
 
 app.put("/api/settings", async (c) => {
-  const b = await c.req.json<{ handle?: string; timezone?: string; slots?: string[]; cookie?: string; paused?: boolean; ai_drafts?: boolean }>();
+  const b = await c.req.json<{ handle?: string; timezone?: string; slots?: string[]; cookie?: string; paused?: boolean; ai_drafts?: boolean; language?: string }>();
   if (b.handle !== undefined) {
     const handle = b.handle.trim().replace(/^@/, "");
     if (handle) {
@@ -84,6 +111,7 @@ app.put("/api/settings", async (c) => {
     const slots = [...new Set(b.slots.map((s) => s.trim()).filter((s) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s)))].sort();
     await setSetting(c.env, "slots", JSON.stringify(slots));
   }
+  if (b.language && b.language in UI_LANGS) await setSetting(c.env, "language", b.language);
   if (b.paused !== undefined) await setSetting(c.env, "paused", b.paused ? "1" : "");
   if (b.ai_drafts !== undefined) await setSetting(c.env, "ai_drafts", b.ai_drafts ? "1" : "0");
   if (b.cookie) {
@@ -159,11 +187,11 @@ app.post("/api/notes", async (c) => {
   return c.json({ ok: true, created: bodies.length });
 });
 
-const NEEDS_REWRITE = "È uno spunto di Claude: riscrivilo con parole tue prima di programmarlo";
+const NEEDS_REWRITE = "È uno spunto di Claude: approvalo o riscrivilo prima di programmarlo";
 
 app.put("/api/notes/:id", async (c) => {
   const id = Number(c.req.param("id"));
-  const b = await c.req.json<{ body?: string; scheduled_at?: number | null }>();
+  const b = await c.req.json<{ body?: string; scheduled_at?: number | null; approve?: boolean }>();
   const note = await c.env.DB.prepare("SELECT status, ai_original, reviewed FROM notes WHERE id = ?")
     .bind(id)
     .first<{ status: string; ai_original: string | null; reviewed: number }>();
@@ -174,7 +202,13 @@ app.put("/api/notes/:id", async (c) => {
     if (!b.body.trim()) return c.json({ error: "Testo vuoto" }, 400);
     // A suggestion written by Claude becomes the writer's own only once it has really been rewritten.
     if (note.ai_original !== null) reviewed = madeOwn(note.ai_original, b.body);
+    if (note.ai_original !== null && note.reviewed === 1) reviewed = true; // once approved, it stays approved
     await c.env.DB.prepare("UPDATE notes SET body = ?, reviewed = ? WHERE id = ?").bind(b.body.trim(), reviewed ? 1 : 0, id).run();
+  }
+  // The writer may also take a suggestion exactly as it is: what matters is that the choice is theirs.
+  if (b.approve && !reviewed) {
+    reviewed = true;
+    await c.env.DB.prepare("UPDATE notes SET reviewed = 1 WHERE id = ?").bind(id).run();
   }
   if (b.scheduled_at !== undefined) {
     if (b.scheduled_at && !reviewed) return c.json({ error: NEEDS_REWRITE, saved: b.body !== undefined }, 409);
@@ -230,6 +264,7 @@ async function voice(env: Env): Promise<Voice> {
   const top = await env.DB.prepare("SELECT substack_id, body FROM my_notes WHERE length(body) > 40 ORDER BY likes + restacks * 2 DESC LIMIT 12").all<Row>();
   const latest = await env.DB.prepare("SELECT substack_id, body FROM my_notes WHERE length(body) > 40 ORDER BY date DESC LIMIT 8").all<Row>();
   const profile = readProfile(s);
+  profile.language = UI_LANGS[s.language]?.name ?? "Italian"; // one language for the whole app, set in the settings
   return {
     voicePrompt: composeVoice(profile),
     samples: profile.samples,
@@ -279,7 +314,7 @@ app.post("/api/voice/analyze", async (c) => {
   const notes = await c.env.DB.prepare("SELECT body FROM my_notes WHERE length(body) > 40 ORDER BY likes + restacks * 2 DESC LIMIT 25").all<{ body: string }>();
   const texts = [...profile.samples, ...notes.results.map((r) => r.body)];
   if (texts.join("").length < 600) return c.json({ error: "Servono più testi: incolla almeno un tuo scritto tra i testi campione e salva" }, 400);
-  return c.json({ portrait: await analyzeVoice(key, texts, profile.language) });
+  return c.json({ portrait: await analyzeVoice(key, texts, UI_LANGS[(await getSettings(c.env)).language]?.name ?? "Italian") });
 });
 
 /** Draft writing is off unless the owner switched it on in the settings. */
@@ -490,7 +525,7 @@ app.post("/api/follows", async (c) => {
   const clean = (handle ?? "").trim().replace(/^https?:\/\/substack\.com\/@/, "").replace(/^@/, "").split(/[/?]/)[0];
   if (!clean) return c.json({ error: "Handle mancante" }, 400);
   const count = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM follows").first<{ n: number }>();
-  if ((count?.n ?? 0) >= 20) return c.json({ error: "Massimo 20 creator (limite delle richieste per sincronizzazione)" }, 400);
+  if ((count?.n ?? 0) >= 10) return c.json({ error: "Massimo 10 profili osservati" }, 400);
   const p = await substack.getProfile(clean);
   await c.env.DB.prepare("INSERT OR REPLACE INTO follows (handle, user_id, name, photo_url, added_at) VALUES (?,?,?,?,?)")
     .bind(p.handle, p.id, p.name, p.photoUrl, Date.now())

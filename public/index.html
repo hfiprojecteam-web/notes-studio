@@ -433,7 +433,7 @@ views.studio = async (v) => {
   const draftHtml = (n, i) => `<div class="draft" ${n.reviewed ? 'draggable="true"' : ""} data-id="${n.id}" style="--i:${i}">
       <span class="grip" title="${n.reviewed ? "Trascina su uno slot" : "Da approvare prima di programmare"}" ${n.reviewed ? "" : 'style="cursor:default;color:var(--accent)"'}>${icon(n.reviewed ? "grip" : "spark")}</span>
       <div class="grow"><div class="body clamp">${esc(n.body)}</div>
-        <div class="row meta" style="margin-top:6px">${n.status === "failed" ? '<span class="tag bad">Errore</span>' : ""}${n.status === "publishing" ? '<span class="tag bad">Bloccata</span>' : ""}${!n.reviewed ? `<span class="tag ok">Spunto di Claude · da approvare</span>` : n.source === "generated" ? `<span class="tag">nata da uno spunto</span>` : ""}<span class="mono">${n.body.length}</span></div>
+        <div class="row meta" style="margin-top:6px">${n.status === "failed" ? '<span class="tag bad">Errore</span>' : ""}${n.status === "publishing" ? '<span class="tag bad">Bloccata</span>' : ""}${!n.reviewed ? `<span class="tag ok">${n.source === "chat" ? "Nata in chat · da approvare" : "Spunto di Claude · da approvare"}</span>` : n.source === "generated" ? `<span class="tag">nata da uno spunto</span>` : n.source === "chat" ? `<span class="tag">nata in chat</span>` : ""}<span class="mono">${n.body.length}</span></div>
         ${n.error ? `<p class="err">${esc(n.error)}</p>` : ""}</div></div>`;
 
   v.innerHTML = `
@@ -494,7 +494,7 @@ function openEditor(n) {
   const d = $("#editor"), isNew = !n.id, locked = n.status === "published" || n.status === "publishing";
   d.innerHTML = `<form method="dialog" class="dlg">
     <div class="row"><h1 style="font-size:18px" class="grow">${isNew ? "Nuova Note" : "Modifica Note"}</h1><button class="quiet" value="close" title="Chiudi">${icon("x")}</button></div>
-    ${n.id && !n.reviewed ? `<p class="meta" style="margin:0;padding:10px 12px;background:var(--accent-soft);border-radius:10px;color:var(--accent)">Questo è uno spunto di Claude. Riscrivilo con parole tue oppure approvalo così com'è: finché non lo fai non si può programmare né pubblicare.</p>` : ""}
+    ${n.id && !n.reviewed ? `<p class="meta" style="margin:0;padding:10px 12px;background:var(--accent-soft);border-radius:10px;color:var(--accent)">Questo testo è nato con l'aiuto di Claude. Riscrivilo con parole tue oppure approvalo così com'è: finché non lo fai non si può programmare né pubblicare.</p>` : ""}
     <textarea id="eBody" ${locked ? "readonly" : ""} placeholder="Scrivi la Note…">${esc(n.body)}</textarea>
     <div class="row"><span class="meta mono" id="eCount">${n.body.length}</span><span class="grow"></span>
       ${settings.ai_drafts ? `<span class="meta">Riscrivi:</span>
@@ -1012,6 +1012,10 @@ views.settings = async (v) => {
         <div class="item meta" style="border:0">Contenuti di altri (risposte, creator seguiti, profili): letti una volta al giorno, a un orario casuale tra le 7 e le 22, con pause tra una richiesta e l'altra.
           ${s.last_others_sync ? ` Ultima lettura ${F(s.last_others_sync)}.` : ""}${s.next_others_sync ? ` Prossima ${F(s.next_others_sync)}.` : ""}
           Le Notes programmate escono fino a 6 minuti dopo lo slot, mai al minuto esatto.</div>
+        <div class="sec"><h2 class="grow">Connettore per Claude</h2><button class="ghost" id="sConn">${s.has_connector ? "Sostituisci indirizzo" : "Crea indirizzo"}</button></div>
+        <p class="meta">Collega Notes Studio a Claude come connettore personalizzato: in chat potrà leggere bozze, risultati, voce, materiali e persone, e salvare bozze che approvi tu qui. Non può programmare, pubblicare né contattare nessuno.</p>${s.has_connector ? '<p class="meta"><span class="tag ok">Un indirizzo è già attivo.</span></p>' : ""}
+        <div id="conn"></div>
+        ${s.has_connector ? `<button class="quiet danger" id="sConnOff">Disattiva il connettore</button>` : ""}
         <div class="sec"><h2 class="grow">Esplorazione</h2><button class="ghost" id="sExplore">Esplora endpoint</button></div>
         <p class="meta">Prova, in sola lettura, gli indirizzi interni di Substack che servirebbero alle prossime funzioni (articoli, restack, iscritti). Salva solo la forma delle risposte, mai i valori.</p>
         <div id="explore" class="list" style="margin-top:10px"></div>
@@ -1025,6 +1029,15 @@ views.settings = async (v) => {
   for (const [id, key, msg] of [["#sPaused", "paused", ["Pausa attivata", "Pausa tolta"]], ["#sAi", "ai_drafts", ["Aiuto di Claude attivato", "Aiuto di Claude disattivato"]]]) {
     $(id).onchange = (e) => act(null, async () => { await api("/settings", "PUT", { [key]: e.target.checked }); settings = await api("/settings"); drawNav(); drawStatus(); toast(msg[e.target.checked ? 0 : 1]); });
   }
+  $("#sConn").onclick = (e) => act(e.currentTarget, async () => {
+    if (s.has_connector && !confirm("L'indirizzo attuale smetterà di funzionare. Continuare?")) return;
+    const r = await api("/connector", "POST");
+    $("#conn").innerHTML = `<div class="field" style="margin:10px 0"><label for="connUrl">Indirizzo del connettore</label><input id="connUrl" class="mono" readonly data-nt value="${esc(r.url)}">
+      <span class="help">Copialo adesso: non verrà più mostrato. In Claude: Impostazioni, Connettori, Aggiungi connettore personalizzato, incolla l'indirizzo e scegli l'accesso senza login. Chi ha questo indirizzo può leggere i tuoi dati nell'app: non condividerlo.</span></div>
+      <button class="ghost" id="connCopy">Copia</button>`;
+    $("#connCopy").onclick = async () => { try { await navigator.clipboard.writeText(r.url); toast("Indirizzo copiato"); } catch { $("#connUrl").select(); toast("Copia non riuscita: seleziona il testo a mano"); } };
+  });
+  if ($("#sConnOff")) $("#sConnOff").onclick = (e) => act(e.currentTarget, async () => { if (!confirm("Disattivare il connettore?")) return; await api("/connector", "DELETE"); toast("Connettore disattivato"); render(); });
   $("#sExplore").onclick = (e) => act(e.currentTarget, async () => {
     $("#explore").innerHTML = skel(3, 30);
     try {

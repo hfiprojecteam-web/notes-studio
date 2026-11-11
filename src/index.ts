@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
-import { Env, encrypt, getSettings, getSid, localParts, zonedToUtc, makeSession, nextSlots, passwordMatches, sessionValid, setSetting, madeOwn } from "./lib";
+import { Env, encrypt, getSettings, getSid, localParts, zonedToUtc, makeSession, nextSlots, passwordMatches, sessionValid, setSetting, madeOwn, sameText, sha256 } from "./lib";
+import { handleMcp } from "./mcp";
 import { checkCookie, personUpdate, publishOne, radarSync, sync, tick } from "./jobs";
 import { EMPTY_PROFILE, Voice, VoiceProfile, analyzeVoice, composeVoice, analyzeCreator, generateNotes, generateOutlines, isMessageKind, personalMessage, isRewriteMode, remixInspiration, rewriteNote, suggestReply } from "./generate";
 import * as substack from "./substack";
@@ -46,6 +47,30 @@ app.get("/i18n/:lang", (c) => {
   return l?.dict ? c.json(l.dict, 200, { "Cache-Control": "public, max-age=300" }) : c.json({}, 404);
 });
 
+// ---------- connector for Claude and other assistants (MCP) ----------
+// The address itself is the key: /mcp/<token>. Only its hash is stored, and it can be replaced from the settings.
+app.all("/mcp/:token", async (c) => {
+  const s = await getSettings(c.env);
+  const token = c.req.param("token");
+  if (!s.connector_hash || token.length < 32 || !sameText(await sha256(token), s.connector_hash)) return c.json({ error: "Not found" }, 404);
+  const session = await makeSession(c.env);
+  // Tools reuse the app's own routes, so the connector can never do more than the app allows.
+  const api = async (path: string, init: { method?: string; body?: unknown } = {}) => {
+    const res = await app.fetch(
+      new Request(`https://internal/api${path}`, {
+        method: init.method ?? "GET",
+        headers: { Cookie: `session=${session}`, ...(init.body ? { "Content-Type": "application/json" } : {}) },
+        body: init.body ? JSON.stringify(init.body) : undefined,
+      }),
+      c.env,
+    );
+    const data: any = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+    return data;
+  };
+  return handleMcp(c.req.raw, api);
+});
+
 // ---------- auth ----------
 
 app.post("/api/login", async (c) => {
@@ -82,6 +107,7 @@ app.get("/api/settings", async (c) => {
     cookie_ok: s.cookie_ok === "" ? null : s.cookie_ok === "1",
     cookie_checked_at: s.cookie_checked_at ? Number(s.cookie_checked_at) : null,
     language: s.language,
+    has_connector: !!s.connector_hash,
     paused: s.paused === "1",
     ai_drafts: s.ai_drafts !== "0",
     next_others_sync: s.next_others_sync ? Number(s.next_others_sync) : null,
@@ -120,6 +146,18 @@ app.put("/api/settings", async (c) => {
     await setSetting(c.env, "sid_enc", await encrypt(c.env, sid));
     await checkCookie(c.env);
   }
+  return c.json({ ok: true });
+});
+
+/** Creates (or replaces) the connector address. It is shown once, here, and never stored in clear. */
+app.post("/api/connector", async (c) => {
+  const token = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  await setSetting(c.env, "connector_hash", await sha256(token));
+  return c.json({ url: `${new URL(c.req.url).origin}/mcp/${token}` });
+});
+
+app.delete("/api/connector", async (c) => {
+  await setSetting(c.env, "connector_hash", "");
   return c.json({ ok: true });
 });
 
@@ -221,6 +259,26 @@ app.put("/api/notes/:id", async (c) => {
 
 app.delete("/api/notes/:id", async (c) => {
   await c.env.DB.prepare("DELETE FROM notes WHERE id = ? AND status != 'publishing'").bind(Number(c.req.param("id"))).run();
+  return c.json({ ok: true });
+});
+
+// Drafts written with an assistant in chat: saved as suggestions that wait for the writer's approval.
+app.post("/api/notes/from-chat", async (c) => {
+  const { body } = await c.req.json<{ body: string }>();
+  if (!body?.trim()) return c.json({ error: "Testo vuoto" }, 400);
+  const r = await c.env.DB.prepare("INSERT INTO notes (body, status, source, created_at, ai_original, reviewed) VALUES (?, 'draft', 'chat', ?, ?, 0)")
+    .bind(body.trim(), Date.now(), body.trim())
+    .run();
+  return c.json({ ok: true, id: r.meta.last_row_id });
+});
+
+app.put("/api/notes/:id/from-chat", async (c) => {
+  const { body } = await c.req.json<{ body: string }>();
+  if (!body?.trim()) return c.json({ error: "Testo vuoto" }, 400);
+  const r = await c.env.DB.prepare("UPDATE notes SET body = ?, ai_original = ?, reviewed = 0, source = 'chat' WHERE id = ? AND status = 'draft'")
+    .bind(body.trim(), body.trim(), Number(c.req.param("id")))
+    .run();
+  if (!r.meta.changes) return c.json({ error: "Bozza non trovata, oppure già programmata o pubblicata" }, 404);
   return c.json({ ok: true });
 });
 

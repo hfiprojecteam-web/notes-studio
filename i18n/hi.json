@@ -460,5 +460,21 @@
  "ispirazione": "प्रेरणा",
  "ora più frequente": "सबसे ज़्यादा आने वाला समय",
  "potenziale cliente": "संभावित कस्टमर",
- "volte la sua media": "उनके औसत का गुना"
+ "volte la sua media": "उनके औसत का गुना",
+ "Connettore per Claude": "Claude के लिए कनेक्टर",
+ "Crea indirizzo": "एड्रेस बनाएँ",
+ "Sostituisci indirizzo": "एड्रेस बदलें",
+ "Collega Notes Studio a Claude come connettore personalizzato: in chat potrà leggere bozze, risultati, voce, materiali e persone, e salvare bozze che approvi tu qui. Non può programmare, pubblicare né contattare nessuno.": "Notes Studio को Claude से कस्टम कनेक्टर के रूप में जोड़ें: चैट में वह ड्राफ़्ट, नतीजे, आवाज़, सामग्री और लोग पढ़ सकेगा, और ऐसे ड्राफ़्ट सेव कर सकेगा जिन्हें आप यहाँ मंज़ूर करते हैं। वह शेड्यूल, पब्लिश या किसी से संपर्क नहीं कर सकता।",
+ "Un indirizzo è già attivo.": "एक एड्रेस पहले से चालू है।",
+ "Disattiva il connettore": "कनेक्टर बंद करें",
+ "Indirizzo del connettore": "कनेक्टर का एड्रेस",
+ "Copialo adesso: non verrà più mostrato. In Claude: Impostazioni, Connettori, Aggiungi connettore personalizzato, incolla l'indirizzo e scegli l'accesso senza login. Chi ha questo indirizzo può leggere i tuoi dati nell'app: non condividerlo.": "इसे अभी कॉपी करें: यह दोबारा नहीं दिखेगा। Claude में: सेटिंग्स, कनेक्टर, कस्टम कनेक्टर जोड़ें, एड्रेस पेस्ट करें और बिना साइन-इन वाला एक्सेस चुनें। जिसके पास यह एड्रेस है वह ऐप में आपका डेटा पढ़ सकता है: इसे शेयर न करें।",
+ "Indirizzo copiato": "एड्रेस कॉपी हो गया",
+ "L'indirizzo attuale smetterà di funzionare. Continuare?": "मौजूदा एड्रेस काम करना बंद कर देगा। जारी रखें?",
+ "Disattivare il connettore?": "कनेक्टर बंद करें?",
+ "Connettore disattivato": "कनेक्टर बंद हो गया",
+ "Nata in chat · da approvare": "चैट से · मंज़ूरी बाकी",
+ "nata in chat": "चैट से",
+ "Questo testo è nato con l'aiuto di Claude. Riscrivilo con parole tue oppure approvalo così com'è: finché non lo fai non si può programmare né pubblicare.": "यह टेक्स्ट Claude की मदद से लिखा गया है। इसे अपने शब्दों में दोबारा लिखें या जैसा है वैसा मंज़ूर करें: तब तक इसे शेड्यूल या पब्लिश नहीं किया जा सकता।",
+ "Bozza non trovata, oppure già programmata o pubblicata": "ड्राफ़्ट नहीं मिला, या पहले ही शेड्यूल या पब्लिश हो चुका है"
 }

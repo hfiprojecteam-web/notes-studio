@@ -460,5 +460,21 @@
  "ispirazione": "inspiração",
  "ora più frequente": "horário mais frequente",
  "potenziale cliente": "cliente em potencial",
- "volte la sua media": "vezes a média dele"
+ "volte la sua media": "vezes a média dele",
+ "Connettore per Claude": "Conector para o Claude",
+ "Crea indirizzo": "Criar endereço",
+ "Sostituisci indirizzo": "Substituir endereço",
+ "Collega Notes Studio a Claude come connettore personalizzato: in chat potrà leggere bozze, risultati, voce, materiali e persone, e salvare bozze che approvi tu qui. Non può programmare, pubblicare né contattare nessuno.": "Conecte o Notes Studio ao Claude como conector personalizado: no chat ele poderá ler rascunhos, resultados, voz, materiais e pessoas, e salvar rascunhos que você aprova aqui. Ele não pode agendar, publicar nem entrar em contato com ninguém.",
+ "Un indirizzo è già attivo.": "Um endereço já está ativo.",
+ "Disattiva il connettore": "Desativar o conector",
+ "Indirizzo del connettore": "Endereço do conector",
+ "Copialo adesso: non verrà più mostrato. In Claude: Impostazioni, Connettori, Aggiungi connettore personalizzato, incolla l'indirizzo e scegli l'accesso senza login. Chi ha questo indirizzo può leggere i tuoi dati nell'app: non condividerlo.": "Copie agora: ele não será mostrado de novo. No Claude: Configurações, Conectores, Adicionar conector personalizado, cole o endereço e escolha o acesso sem login. Quem tiver este endereço pode ler seus dados no app: não compartilhe.",
+ "Indirizzo copiato": "Endereço copiado",
+ "L'indirizzo attuale smetterà di funzionare. Continuare?": "O endereço atual vai parar de funcionar. Continuar?",
+ "Disattivare il connettore?": "Desativar o conector?",
+ "Connettore disattivato": "Conector desativado",
+ "Nata in chat · da approvare": "Criada no chat · a aprovar",
+ "nata in chat": "criada no chat",
+ "Questo testo è nato con l'aiuto di Claude. Riscrivilo con parole tue oppure approvalo così com'è: finché non lo fai non si può programmare né pubblicare.": "Este texto foi escrito com a ajuda do Claude. Reescreva com suas palavras ou aprove como está: até lá, não dá para agendar nem publicar.",
+ "Bozza non trovata, oppure già programmata o pubblicata": "Rascunho não encontrado, ou já agendado ou publicado"
 }

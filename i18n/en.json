@@ -460,5 +460,21 @@
  "ispirazione": "inspiration",
  "ora più frequente": "most frequent hour",
  "potenziale cliente": "potential customer",
- "volte la sua media": "times their average"
+ "volte la sua media": "times their average",
+ "Connettore per Claude": "Connector for Claude",
+ "Crea indirizzo": "Create address",
+ "Sostituisci indirizzo": "Replace address",
+ "Collega Notes Studio a Claude come connettore personalizzato: in chat potrà leggere bozze, risultati, voce, materiali e persone, e salvare bozze che approvi tu qui. Non può programmare, pubblicare né contattare nessuno.": "Connect Notes Studio to Claude as a custom connector: in chat it can read drafts, results, voice, materials and people, and save drafts that you approve here. It cannot schedule, publish or contact anyone.",
+ "Un indirizzo è già attivo.": "An address is already active.",
+ "Disattiva il connettore": "Turn off the connector",
+ "Indirizzo del connettore": "Connector address",
+ "Copialo adesso: non verrà più mostrato. In Claude: Impostazioni, Connettori, Aggiungi connettore personalizzato, incolla l'indirizzo e scegli l'accesso senza login. Chi ha questo indirizzo può leggere i tuoi dati nell'app: non condividerlo.": "Copy it now: it will not be shown again. In Claude: Settings, Connectors, Add custom connector, paste the address and choose access without sign-in. Anyone with this address can read your data in the app: do not share it.",
+ "Indirizzo copiato": "Address copied",
+ "L'indirizzo attuale smetterà di funzionare. Continuare?": "The current address will stop working. Continue?",
+ "Disattivare il connettore?": "Turn off the connector?",
+ "Connettore disattivato": "Connector turned off",
+ "Nata in chat · da approvare": "From chat · to approve",
+ "nata in chat": "from chat",
+ "Questo testo è nato con l'aiuto di Claude. Riscrivilo con parole tue oppure approvalo così com'è: finché non lo fai non si può programmare né pubblicare.": "This text was written with Claude's help. Rewrite it in your own words or approve it as it is: until you do, it cannot be scheduled or published.",
+ "Bozza non trovata, oppure già programmata o pubblicata": "Draft not found, or already scheduled or published"
 }

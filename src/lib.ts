@@ -82,6 +82,7 @@ export interface Settings {
   last_others_sync: string;
   last_manual_sync: string;
   pub_subdomain: string;
+  connector_hash: string; // SHA-256 of the connector token; the token itself is never stored
   next_radar_sync: string;
   last_radar_sync: string;
   language: string; // interface and writing language: it, en, de, es, ru, fr, hi, pt
@@ -106,6 +107,7 @@ const DEFAULTS: Settings = {
   last_others_sync: "",
   last_manual_sync: "",
   pub_subdomain: "",
+  connector_hash: "",
   next_radar_sync: "",
   last_radar_sync: "",
   language: "it",
@@ -202,4 +204,12 @@ export function madeOwn(original: string, current: string): boolean {
   const norm = (t: string) => t.replace(/\s+/g, " ").trim();
   const o = norm(original), c = norm(current);
   return editDistance(o, c) >= Math.max(15, Math.round(o.length * 0.2));
+}
+
+export async function sha256(text: string) {
+  return hex(await crypto.subtle.digest("SHA-256", enc.encode(text)));
+}
+
+export function sameText(a: string, b: string) {
+  return safeEqual(a, b);
 }

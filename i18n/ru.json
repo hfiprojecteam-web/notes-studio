@@ -460,5 +460,21 @@
  "ispirazione": "вдохновение",
  "ora più frequente": "самый частый час",
  "potenziale cliente": "потенциальный клиент",
- "volte la sua media": "раз от его среднего"
+ "volte la sua media": "раз от его среднего",
+ "Connettore per Claude": "Коннектор для Claude",
+ "Crea indirizzo": "Создать адрес",
+ "Sostituisci indirizzo": "Заменить адрес",
+ "Collega Notes Studio a Claude come connettore personalizzato: in chat potrà leggere bozze, risultati, voce, materiali e persone, e salvare bozze che approvi tu qui. Non può programmare, pubblicare né contattare nessuno.": "Подключи Notes Studio к Claude как пользовательский коннектор: в чате он сможет читать черновики, результаты, голос, материалы и людей и сохранять черновики, которые ты одобряешь здесь. Планировать, публиковать и писать кому-либо он не может.",
+ "Un indirizzo è già attivo.": "Адрес уже активен.",
+ "Disattiva il connettore": "Отключить коннектор",
+ "Indirizzo del connettore": "Адрес коннектора",
+ "Copialo adesso: non verrà più mostrato. In Claude: Impostazioni, Connettori, Aggiungi connettore personalizzato, incolla l'indirizzo e scegli l'accesso senza login. Chi ha questo indirizzo può leggere i tuoi dati nell'app: non condividerlo.": "Скопируй его сейчас: больше он показан не будет. В Claude: Настройки, Коннекторы, Добавить пользовательский коннектор, вставь адрес и выбери доступ без входа. Любой, у кого есть этот адрес, может читать твои данные в приложении: не делись им.",
+ "Indirizzo copiato": "Адрес скопирован",
+ "L'indirizzo attuale smetterà di funzionare. Continuare?": "Текущий адрес перестанет работать. Продолжить?",
+ "Disattivare il connettore?": "Отключить коннектор?",
+ "Connettore disattivato": "Коннектор отключён",
+ "Nata in chat · da approvare": "Из чата · ждёт одобрения",
+ "nata in chat": "из чата",
+ "Questo testo è nato con l'aiuto di Claude. Riscrivilo con parole tue oppure approvalo così com'è: finché non lo fai non si può programmare né pubblicare.": "Этот текст написан с помощью Claude. Перепиши его своими словами или одобри как есть: до этого его нельзя запланировать или опубликовать.",
+ "Bozza non trovata, oppure già programmata o pubblicata": "Черновик не найден либо уже запланирован или опубликован"
 }

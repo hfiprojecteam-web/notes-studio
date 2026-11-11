@@ -460,5 +460,21 @@
  "ispirazione": "inspiration",
  "ora più frequente": "heure la plus fréquente",
  "potenziale cliente": "client potentiel",
- "volte la sua media": "fois sa moyenne"
+ "volte la sua media": "fois sa moyenne",
+ "Connettore per Claude": "Connecteur pour Claude",
+ "Crea indirizzo": "Créer une adresse",
+ "Sostituisci indirizzo": "Remplacer l'adresse",
+ "Collega Notes Studio a Claude come connettore personalizzato: in chat potrà leggere bozze, risultati, voce, materiali e persone, e salvare bozze che approvi tu qui. Non può programmare, pubblicare né contattare nessuno.": "Relie Notes Studio à Claude comme connecteur personnalisé : dans le chat, il pourra lire les brouillons, les résultats, la voix, les documents et les personnes, et enregistrer des brouillons que tu approuves ici. Il ne peut ni programmer, ni publier, ni contacter qui que ce soit.",
+ "Un indirizzo è già attivo.": "Une adresse est déjà active.",
+ "Disattiva il connettore": "Désactiver le connecteur",
+ "Indirizzo del connettore": "Adresse du connecteur",
+ "Copialo adesso: non verrà più mostrato. In Claude: Impostazioni, Connettori, Aggiungi connettore personalizzato, incolla l'indirizzo e scegli l'accesso senza login. Chi ha questo indirizzo può leggere i tuoi dati nell'app: non condividerlo.": "Copie-la maintenant : elle ne sera plus affichée. Dans Claude : Paramètres, Connecteurs, Ajouter un connecteur personnalisé, colle l'adresse et choisis l'accès sans connexion. Toute personne qui a cette adresse peut lire tes données dans l'app : ne la partage pas.",
+ "Indirizzo copiato": "Adresse copiée",
+ "L'indirizzo attuale smetterà di funzionare. Continuare?": "L'adresse actuelle cessera de fonctionner. Continuer ?",
+ "Disattivare il connettore?": "Désactiver le connecteur ?",
+ "Connettore disattivato": "Connecteur désactivé",
+ "Nata in chat · da approvare": "Née dans le chat · à approuver",
+ "nata in chat": "née dans le chat",
+ "Questo testo è nato con l'aiuto di Claude. Riscrivilo con parole tue oppure approvalo così com'è: finché non lo fai non si può programmare né pubblicare.": "Ce texte a été écrit avec l'aide de Claude. Réécris-le avec tes mots ou approuve-le tel quel : d'ici là, il ne peut être ni programmé ni publié.",
+ "Bozza non trovata, oppure già programmata o pubblicata": "Brouillon introuvable, ou déjà programmé ou publié"
 }

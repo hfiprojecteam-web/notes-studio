@@ -460,5 +460,21 @@
  "ispirazione": "Inspiration",
  "ora più frequente": "häufigste Uhrzeit",
  "potenziale cliente": "potenzieller Kunde",
- "volte la sua media": "mal sein Schnitt"
+ "volte la sua media": "mal sein Schnitt",
+ "Connettore per Claude": "Connector für Claude",
+ "Crea indirizzo": "Adresse erstellen",
+ "Sostituisci indirizzo": "Adresse ersetzen",
+ "Collega Notes Studio a Claude come connettore personalizzato: in chat potrà leggere bozze, risultati, voce, materiali e persone, e salvare bozze che approvi tu qui. Non può programmare, pubblicare né contattare nessuno.": "Verbinde Notes Studio als benutzerdefinierten Connector mit Claude: Im Chat kann Claude Entwürfe, Ergebnisse, Stimme, Materialien und Personen lesen und Entwürfe speichern, die du hier freigibst. Planen, veröffentlichen oder jemanden kontaktieren kann es nicht.",
+ "Un indirizzo è già attivo.": "Eine Adresse ist bereits aktiv.",
+ "Disattiva il connettore": "Connector deaktivieren",
+ "Indirizzo del connettore": "Connector-Adresse",
+ "Copialo adesso: non verrà più mostrato. In Claude: Impostazioni, Connettori, Aggiungi connettore personalizzato, incolla l'indirizzo e scegli l'accesso senza login. Chi ha questo indirizzo può leggere i tuoi dati nell'app: non condividerlo.": "Kopiere sie jetzt: Sie wird nicht noch einmal angezeigt. In Claude: Einstellungen, Connectors, Benutzerdefinierten Connector hinzufügen, Adresse einfügen und Zugriff ohne Anmeldung wählen. Wer diese Adresse hat, kann deine Daten in der App lesen: Gib sie nicht weiter.",
+ "Indirizzo copiato": "Adresse kopiert",
+ "L'indirizzo attuale smetterà di funzionare. Continuare?": "Die aktuelle Adresse funktioniert dann nicht mehr. Fortfahren?",
+ "Disattivare il connettore?": "Connector deaktivieren?",
+ "Connettore disattivato": "Connector deaktiviert",
+ "Nata in chat · da approvare": "Aus dem Chat · freizugeben",
+ "nata in chat": "aus dem Chat",
+ "Questo testo è nato con l'aiuto di Claude. Riscrivilo con parole tue oppure approvalo così com'è: finché non lo fai non si può programmare né pubblicare.": "Dieser Text ist mit Claudes Hilfe entstanden. Schreib ihn in deinen eigenen Worten um oder übernimm ihn, wie er ist: Vorher lässt er sich weder planen noch veröffentlichen.",
+ "Bozza non trovata, oppure già programmata o pubblicata": "Entwurf nicht gefunden oder bereits geplant oder veröffentlicht"
 }

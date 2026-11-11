@@ -19,6 +19,7 @@ Non dare per scontato che il prodotto abbia un mercato. "Non c'è spazio" o "c'�
 5. **Cosa pagano e quanto.** Prezzi dichiarati degli strumenti esistenti, cosa includono, e ciò che gli utenti dicono del rapporto tra prezzo e valore.
 6. **Articoli lunghi e altri contenuti.** Se e quanto questi utenti chiedono aiuto su articoli, serie, podcast, video, chat, e in quale punto del lavoro (idea, scaletta, stesura, titolo, riuso in Notes, misura dei risultati).
 7. **Cosa manca agli strumenti esistenti.** Lamentele ricorrenti, richieste di funzioni, motivi di abbandono.
+8. **Analisi o produzione.** Cipriano sta valutando di orientare lo strumento verso l'analisi: dati sui propri contenuti, sulle persone e sui creator, con indicazioni su cosa fare, togliendo la generazione di testi e forse anche la programmazione. Cerca evidenza a favore e contro. In particolare: per cosa pagano davvero oggi gli utenti degli strumenti esistenti (programmare, generare, capire i numeri); se la programmazione nativa delle Notes introdotta da Substack ha tolto valore agli strumenti che programmano; se chi ha solo dati senza azioni continua a usarli; quali decisioni concrete gli utenti vorrebbero prendere con i dati e non riescono.
 
 ## Come lavorare
 
@@ -47,10 +48,11 @@ Un documento unico in italiano, in quest'ordine.
 3. **Classifica dei problemi:** tabella con problema, a chi tocca, in quante fonti indipendenti compare, stato e prova, una citazione rappresentativa con link.
 4. **Obiezioni e rischi percepiti**, con il peso che hanno nelle fonti. Presta attenzione particolare alla consegna delle credenziali e al timore per l'account.
 5. **Mappa degli strumenti esistenti:** cosa fa ciascuno, prezzo, per chi è, punti di forza e lamentele ricorrenti.
-6. **Articoli lunghi e altri contenuti:** cosa viene chiesto, da chi, quanto spesso, e in quale punto del lavoro. Concludi con una raccomandazione motivata: costruire, non costruire, o costruire solo una parte.
-7. **Conseguenze per Notes Studio:** confronta ciò che hai trovato con `docs/STATO.md`. Quali funzioni esistenti rispondono a problemi reali, quali a problemi che nessuno ha citato, cosa manca. Poche righe per voce.
-8. **Cosa non hai potuto verificare** e come lo si potrebbe verificare (per esempio cinque conversazioni con utenti veri, e con quali domande).
-9. **Elenco delle fonti** con link, data di consultazione e tipo (indipendente, di parte, venditore).
+6. **Analisi o produzione:** cosa dice l'evidenza sulle due direzioni, con una raccomandazione motivata e ciò che la farebbe cambiare.
+7. **Articoli lunghi e altri contenuti:** cosa viene chiesto, da chi, quanto spesso, e in quale punto del lavoro. Concludi con una raccomandazione motivata: costruire, non costruire, o costruire solo una parte.
+8. **Conseguenze per Notes Studio:** confronta ciò che hai trovato con `docs/STATO.md`. Quali funzioni esistenti rispondono a problemi reali, quali a problemi che nessuno ha citato, cosa manca. Poche righe per voce.
+9. **Cosa non hai potuto verificare** e come lo si potrebbe verificare (per esempio cinque conversazioni con utenti veri, e con quali domande).
+10. **Elenco delle fonti** con link, data di consultazione e tipo (indipendente, di parte, venditore).
 
 Scrivi per una persona che decide, non per un ricercatore: frasi piene, niente gergo, numeri con il loro contesto. Dove l'evidenza è debole, dillo nel punto in cui conta, non in una nota finale.
 

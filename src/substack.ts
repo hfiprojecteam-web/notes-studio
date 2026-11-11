@@ -142,6 +142,39 @@ export async function getNoteAuthorHandle(noteId: string, sid?: string): Promise
   return d?.item?.comment?.handle ?? null;
 }
 
+export interface NoteStats {
+  follows: number;
+  freeSubs: number;
+  paidSubs: number;
+  clicks: number;
+  shareClicks: number;
+  arr: number;
+}
+
+/** What one of my own Notes brought in: follows, subscriptions and clicks. Needs the session cookie. */
+export async function getNoteStats(noteId: string, sid: string): Promise<NoteStats | null> {
+  const d = await call(`/reader/comment/${noteId}/stats`, {}, sid);
+  const f = d?.item?.feedItemStats;
+  if (!f) return null;
+  return {
+    follows: f.total_follows ?? 0,
+    freeSubs: f.total_free_subscriptions ?? 0,
+    paidSubs: f.total_paid_subscriptions ?? 0,
+    clicks: f.total_clicks ?? 0,
+    shareClicks: f.total_share_clicks ?? 0,
+    arr: f.total_arr ?? 0,
+  };
+}
+
+/** Where new subscribers of my publication came from, as Substack's own dashboard reports it. */
+export async function getGrowthSources(subdomain: string, days: number, sid: string): Promise<any> {
+  const res = await fetch(`https://${subdomain}.substack.com/api/v1/publication/stats/growth/sources?days=${days}`, {
+    headers: { "User-Agent": UA, Accept: "application/json", Cookie: `substack.sid=${sid}` },
+  });
+  if (!res.ok) throw new SubstackError(`Fonti di crescita non disponibili (HTTP ${res.status})`, res.status);
+  return res.json();
+}
+
 /** Published posts of a user with their public counters, newest first. */
 export async function getUserPosts(userId: number, limit = 12, sid?: string) {
   const d = await call(`/profile/posts?profile_user_id=${userId}&limit=${limit}`, {}, sid);

@@ -81,6 +81,7 @@ export interface Settings {
   next_others_sync: string;
   last_others_sync: string;
   last_manual_sync: string;
+  pub_subdomain: string;
 }
 
 const DEFAULTS: Settings = {
@@ -101,6 +102,7 @@ const DEFAULTS: Settings = {
   next_others_sync: "",
   last_others_sync: "",
   last_manual_sync: "",
+  pub_subdomain: "",
 };
 
 export async function getSettings(env: Env): Promise<Settings> {

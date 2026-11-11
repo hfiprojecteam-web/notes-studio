@@ -686,6 +686,15 @@ views.stats = async (v) => {
       <select id="days" class="auto">${[30, 90, 365, 3650].map((x) => `<option value="${x}" ${x === statDays ? "selected" : ""}>${x === 3650 ? "Da sempre" : "Ultimi " + x + " giorni"}</option>`).join("")}</select>
       <button class="ghost" id="syncNow">${icon("repeat")}Aggiorna i miei dati</button><button class="quiet" id="syncDeep" title="Scarica anche le Notes più vecchie">Importa storico</button></div>
     ${trendHtml}
+    ${d.brought.measured ? `<div class="sec" style="margin-top:0"><h2>Cosa hanno portato le tue Notes</h2><span class="n mono">${d.brought.measured} misurate</span></div>
+    <div class="metrics" style="grid-template-columns:repeat(4,1fr)">
+      <div class="metric"><b style="font-size:30px;color:var(--accent)">${d.brought.free_subs}</b><span class="meta">iscritti gratuiti</span></div>
+      <div class="metric"><b>${d.brought.paid_subs}</b><span class="meta">iscritti a pagamento</span></div>
+      <div class="metric"><b>${d.brought.follows}</b><span class="meta">nuovi follower</span></div>
+      <div class="metric"><b>${d.brought.clicks}</b><span class="meta">clic sui link</span></div>
+    </div>
+    ${d.by_result.length ? `<div class="list" style="margin:-14px 0 30px">${d.by_result.map((n, i) => `<div class="item" style="--i:${i}"><div class="body clamp">${esc(n.body)}</div><div class="row meta mono" style="margin-top:6px;gap:14px"><span>${n.free_subs} gratuiti</span><span>${n.paid_subs} a pagamento</span><span>${n.follows} follower</span><span>${n.clicks} clic</span><span>${fmt(n.date, { day: "numeric", month: "short" })}</span></div></div>`).join("")}</div>` : ""}` : ""}
+    <div id="sources" style="margin-bottom:30px"></div>
     ${d.total ? `
     <div class="metrics">
       <div class="metric"><b>${avg}</b><span class="meta">interazioni medie per Note</span></div>
@@ -703,6 +712,16 @@ views.stats = async (v) => {
         <button class="quiet" data-reuse="${n.substack_id}">${icon("plus")}Riusa come bozza</button><a class="quiet" href="https://substack.com/note/c-${n.substack_id}" target="_blank" rel="noopener">${icon("ext")}Apri</a></div></div>`).join("")}</div>`
     : empty("Nessuna Note in questo periodo", "Premi Importa storico per scaricare le tue Notes da Substack, oppure allarga il periodo.")}`;
   $("#days").onchange = (e) => { statDays = +e.target.value; render(); };
+  // Subscriber sources come straight from Substack's dashboard; shown only when the call works.
+  api("/sources?days=" + Math.min(statDays, 365)).then((r) => {
+    const box = $("#sources"); if (!box || tab !== "stats") return;
+    const nums = (m) => Object.entries(m).filter(([, x]) => typeof x === "number").map(([k, x]) => `${esc(k.replace(/_/g, " "))} ${x}`).join(" · ");
+    const label = (m) => esc(m.name ?? m.label ?? "");
+    box.innerHTML = `<div class="sec" style="margin-top:0"><h2>Da dove arrivano gli iscritti</h2><span class="n mono">${r.days} giorni</span></div>
+      <div class="row" style="gap:26px;margin-bottom:10px">${r.totals.map((t) => `<div><b class="mono" style="font-size:22px;font-weight:500">${t.total ?? ""}</b><div class="meta">${label(t)}</div></div>`).join("")}</div>
+      <div class="list">${r.sources.map((x) => `<div class="item" style="padding:10px 2px"><div class="row"><b style="font-weight:500" class="grow">${esc(x.name)}</b><span class="meta mono">${x.metrics.map((m) => `${label(m)} ${nums(m)}`).join(" | ")}</span></div>
+        ${x.children.length ? `<div class="meta" style="margin-top:4px">${x.children.map((ch) => `${esc(ch.name)}: <span class="mono">${ch.metrics.map((m) => `${label(m)} ${nums(m)}`).join(", ")}</span>`).join(" · ")}</div>` : ""}</div>`).join("")}</div>`;
+  }).catch(() => {});
   $("#syncNow").onclick = (e) => act(e.currentTarget, async () => { const r = await api("/sync", "POST"); toast(`Sincronizzate ${r.myNotes} Notes`); render(); });
   $("#syncDeep").onclick = (e) => act(e.currentTarget, async () => { const r = await api("/sync?deep=1", "POST"); toast(`Importate ${r.myNotes} Notes`); render(); });
   v.onclick = (e) => { const b = e.target.closest("[data-reuse]"); if (b) act(b, async () => { await api("/notes", "POST", { body: d.top.find((n) => n.substack_id === b.dataset.reuse).body }); toast("Copiata nelle bozze"); }); };

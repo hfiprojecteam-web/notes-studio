@@ -63,6 +63,25 @@ export async function sync(env: Env, opts: { deep?: boolean; others?: boolean } 
     );
   }
 
+  // 1b. What each recent note brought in (follows, subscriptions, clicks): my own dashboard data
+  if (sid) {
+    for (const n of mine.filter((x) => now - x.date < 30 * 86400_000).slice(0, 10)) {
+      await nap(500, 1500);
+      try {
+        const st = await substack.getNoteStats(n.id, sid);
+        if (st) {
+          stmts.push(
+            env.DB.prepare("UPDATE my_notes SET follows=?, free_subs=?, paid_subs=?, clicks=?, share_clicks=?, arr=?, stats_at=? WHERE substack_id=?").bind(
+              st.follows, st.freeSubs, st.paidSubs, st.clicks, st.shareClicks, st.arr, now, n.id,
+            ),
+          );
+        }
+      } catch {
+        break; // a refusal here means the cookie or the endpoint is off: stop asking for this run
+      }
+    }
+  }
+
   // 2. Replies to my recent notes that I have not answered
   const recent = others ? mine.filter((n) => n.replies > 0 && now - n.date < 14 * 86400_000).slice(0, 12) : [];
   for (const n of recent) {
@@ -121,6 +140,7 @@ export async function sync(env: Env, opts: { deep?: boolean; others?: boolean } 
   // 4. Daily snapshot of my own numbers, so trends can be drawn later
   try {
     const p = await substack.getFullProfile(s.handle, sid);
+    if (p.pubSubdomain) await setSetting(env, "pub_subdomain", p.pubSubdomain);
     const lp = localParts(now, s.timezone);
     const day = `${lp.y}-${String(lp.m).padStart(2, "0")}-${String(lp.d).padStart(2, "0")}`;
     stmts.push(

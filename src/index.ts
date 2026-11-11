@@ -412,6 +412,15 @@ app.get("/api/stats", async (c) => {
     likes: results.reduce((a, n) => a + n.likes, 0),
     restacks: results.reduce((a, n) => a + n.restacks, 0),
     replies: results.reduce((a, n) => a + n.replies, 0),
+    brought: {
+      measured: results.filter((n: any) => n.stats_at).length,
+      follows: results.reduce((a, n: any) => a + (n.follows ?? 0), 0),
+      free_subs: results.reduce((a, n: any) => a + (n.free_subs ?? 0), 0),
+      paid_subs: results.reduce((a, n: any) => a + (n.paid_subs ?? 0), 0),
+      clicks: results.reduce((a, n: any) => a + (n.clicks ?? 0), 0),
+    },
+    by_result: [...results].filter((n: any) => (n.free_subs ?? 0) + (n.paid_subs ?? 0) + (n.follows ?? 0) > 0)
+      .sort((a: any, b: any) => (b.paid_subs * 100 + b.free_subs * 10 + b.follows) - (a.paid_subs * 100 + a.free_subs * 10 + a.follows)).slice(0, 10),
     by_hour: bucket((n) => localParts(n.date, s.timezone).h).sort((a, b) => a.key - b.key),
     by_weekday: bucket((n) => localParts(n.date, s.timezone).weekday),
     by_length: bucket((n) => lengthLabel(n.body.length)),
@@ -577,6 +586,26 @@ app.put("/api/people/:id", async (c) => {
 app.delete("/api/people/:id", async (c) => {
   await c.env.DB.prepare("DELETE FROM people WHERE user_id = ?").bind(Number(c.req.param("id"))).run();
   return c.json({ ok: true });
+});
+
+// ---------- growth sources ----------
+
+app.get("/api/sources", async (c) => {
+  const s = await getSettings(c.env);
+  const sid = await getSid(c.env, s);
+  if (!sid || !s.pub_subdomain) return c.json({ error: "Servono il cookie e una pubblicazione: riprova dopo il prossimo aggiornamento dei dati" }, 400);
+  const days = Math.min(Math.max(Number(c.req.query("days")) || 30, 7), 365);
+  const d = await substack.getGrowthSources(s.pub_subdomain, days, sid);
+  // Pass on only names and numbers: the dashboard payload also carries logos and other noise.
+  const slim = (m: any) => (m && typeof m === "object" ? Object.fromEntries(Object.entries(m).filter(([, v]) => typeof v === "number" || typeof v === "string").slice(0, 8)) : m);
+  return c.json({
+    days,
+    totals: (d.totals ?? []).map(slim),
+    sources: (d.sourceMetrics ?? []).map((x: any) => ({
+      name: x.sourceName ?? x.source, category: x.category, metrics: (x.metrics ?? []).map(slim),
+      children: (x.children ?? []).map((ch: any) => ({ name: ch.sourceName ?? ch.source, metrics: (ch.metrics ?? []).map(slim) })),
+    })),
+  });
 });
 
 // ---------- trend ----------

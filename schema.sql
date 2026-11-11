@@ -27,7 +27,9 @@ CREATE TABLE IF NOT EXISTS my_notes (
   likes INTEGER NOT NULL DEFAULT 0,
   restacks INTEGER NOT NULL DEFAULT 0,
   replies INTEGER NOT NULL DEFAULT 0,
-  synced_at INTEGER NOT NULL
+  synced_at INTEGER NOT NULL,
+  follows INTEGER, free_subs INTEGER, paid_subs INTEGER, clicks INTEGER, share_clicks INTEGER, arr REAL, -- what the note brought in
+  stats_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS follows (
